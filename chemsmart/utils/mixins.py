@@ -16,6 +16,7 @@ Key mixin classes:
 """
 
 import inspect
+import logging
 import os
 import re
 from datetime import datetime
@@ -23,6 +24,7 @@ from functools import cached_property
 
 from ase import units
 
+from chemsmart.io.crest.route import CRESTRoute
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
 from chemsmart.io.xtb.route import XTBRoute
@@ -31,6 +33,8 @@ from chemsmart.utils.repattern import (
     orca_date_pattern,
     xtb_date_pattern,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
@@ -1422,7 +1426,7 @@ class XTBFileMixin(FileMixin):
     Mixin class for xTB computational chemistry files.
 
     Extends FileMixin with xTB-specific functionality including
-    route string parsing, job type detection, and settings extraction.
+    program call parsing, job type detection, and settings extraction.
     Handles xTB file formats and calculation parameters.
     """
 
@@ -1461,19 +1465,19 @@ class XTBFileMixin(FileMixin):
     @property
     def route_string(self):
         """
-        Get the route string from xTB main output file.
+        Get the program call from xTB main output file.
 
         Returns the computational route string as defined in the
         program call. Implementation is provided by subclasses.
 
         Returns:
-            str: Route string for xTB calculations.
+            str: Program call for xTB calculations.
         """
         return self._get_route()
 
     def _get_route(self):
         """
-        Get route string from file contents.
+        Get program call from file contents.
 
         Default implementation that must be overridden by subclasses
         to provide specific route string extraction logic.
@@ -1486,9 +1490,9 @@ class XTBFileMixin(FileMixin):
     @property
     def route_object(self):
         """
-        Get parsed xTB route object from route string.
+        Get parsed xTB route object from the program call.
 
-        Creates an XTBRoute object from the route string to
+        Creates an XTBRoute object from the program call to
         provide structured access to calculation parameters.
 
         Returns:
@@ -1498,7 +1502,7 @@ class XTBFileMixin(FileMixin):
 
     @property
     def method(self):
-        """Get the computational method from xTB route string or output Hamiltonian."""
+        """Get the computational method from the xTB program call or output Hamiltonian."""
         gfn = self.route_object.method
         if gfn:
             return gfn
@@ -1606,6 +1610,144 @@ class XTBFileMixin(FileMixin):
             bool: True if gradient calculation is specified
         """
         return self.route_object.grad
+
+
+class CRESTFileMixin(FileMixin):
+    """
+    Mixin class for CREST computational chemistry output files.
+
+    Extends FileMixin with CREST-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles CREST file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        """
+        Extract CREST version from the banner line.
+
+        Example line:
+            Version 3.0.2, Tue, 05 August 16:25:20, 08/05/2025
+        """
+        for line in self.contents:
+            stripped = line.strip()
+            if stripped.startswith("Version "):
+                # "Version 3.0.2, ..." → "3.0.2"
+                return (
+                    stripped.split(",", 1)[0].replace("Version ", "").strip()
+                )
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from CREST main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Program call for CREST calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get program call from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed CREST route object from the program call.
+
+        Creates a CRESTRoute object from the program call to
+        provide structured access to calculation parameters.
+
+        Returns:
+            CRESTRoute: Parsed CREST route object.
+        """
+        return CRESTRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from CREST route string."""
+        return self.route_object.method
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """CREST does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (always 'conformers' for CREST).
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def charge(self):
+        """Molecular charge from the CREST command line."""
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """Number of unpaired electrons from the CREST command line."""
+        return self.route_object.uhf
+
+    @property
+    def multiplicity(self):
+        """Spin multiplicity (uhf + 1)."""
+        return self.route_object.multiplicity
+
+    @property
+    def solvent_model(self):
+        """Implicit solvent model ('alpb' or 'gbsa')."""
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """Solvent identifier."""
+        return self.route_object.solvent_id
+
+    @property
+    def optimization_level(self):
+        """Optimization convergence level."""
+        return self.route_object.optimization_level
+
+    @property
+    def constrained(self):
+        """Whether --cinp constraint input file was specified."""
+        return self.route_object.constrained
 
 
 class YAMLFileMixin(FileMixin):
@@ -2116,3 +2258,32 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
+
+
+class FolderOutputMixin:
+    """Mixin for output classes that read from a calculation folder."""
+
+    FILE_PARSERS = ()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to internal file parsers.
+
+        Searches the file parsers specified by FILE_PARSERS in order and returns the requested
+        attribute from the first parser that provides it. Parser attributes that are None or do
+        not provide the requested attribute are skipped. Raises AttributeError when no parser
+        provides the requested attribute.
+        """
+        for file_parser in self.FILE_PARSERS:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        continue
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
+                continue
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )

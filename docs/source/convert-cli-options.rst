@@ -30,9 +30,7 @@ convert --help`` for the complete list.
       -  Input molecular structure file for single-file conversion
 
    -  -  ``-o, --output``
-
       -  string
-
       -  Output file path (format is inferred from the extension). Optional for single-file conversion; may be an
          extension only (e.g. ``.xyz`` or ``xyz``) to keep the input basename. When omitted with ``--input``, writes
          ``{input_stem}.xyz`` by default
