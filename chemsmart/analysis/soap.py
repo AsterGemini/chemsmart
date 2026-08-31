@@ -69,6 +69,34 @@ def _has_translation_vectors(molecule: Molecule) -> bool:
         return True
 
 
+def _unrecognized_symbol_error(symbol: str) -> ValueError:
+    """SOAP error for a symbol that is not a standard chemical element."""
+    return ValueError(
+        f"Unrecognized elemental symbol for SOAP: {symbol!r}. "
+        "Use standard chemical element symbols (e.g. 'H' not 'D')."
+    )
+
+
+def _canonicalize_symbol(symbol: str) -> str:
+    """Return a canonical element symbol (``fe`` → ``Fe``).
+
+    Uses ``PeriodicTable.to_element`` for the same capitalization rules as
+    the rest of CHEMSMART. The stripped input must be that canonical symbol
+    ignoring case, so prefix matches such as ``Xx`` → ``X`` are rejected.
+    """
+    raw = str(symbol).strip()
+    try:
+        canonical = _PERIODIC_TABLE.to_element(raw)
+    except ValueError as exc:
+        raise _unrecognized_symbol_error(symbol) from exc
+    if (
+        canonical not in _PERIODIC_TABLE.PERIODIC_TABLE
+        or raw.casefold() != canonical.casefold()
+    ):
+        raise _unrecognized_symbol_error(symbol)
+    return canonical
+
+
 def _normalize_species(species: Sequence[str] | None, symbols: list[str]):
     """Return the SOAP elemental species basis.
 
@@ -82,8 +110,7 @@ def _normalize_species(species: Sequence[str] | None, symbols: list[str]):
         return sorted(set(symbols))
     if len(species) == 0:
         raise ValueError("species must be a non-empty sequence of symbols.")
-    normalized = [str(s) for s in species]
-    _validate_symbols(normalized)
+    normalized = [_canonicalize_symbol(s) for s in species]
     missing = sorted(set(symbols) - set(normalized))
     if missing:
         raise ValueError(
@@ -168,22 +195,16 @@ def _validate_positions(positions: np.ndarray, num_atoms: int) -> np.ndarray:
 
 
 def _live_symbols(molecule: Molecule) -> list[str]:
-    """Return current chemical symbols from the live ``symbols`` attribute."""
+    """Return current chemical symbols from the live ``symbols`` attribute.
+
+    Symbols are case-normalized (``fe`` → ``Fe``) so channel indexing
+    matches ``PeriodicTable.to_atomic_number``.
+    """
     # Prefer ``symbols`` over ``chemical_symbols`` so SOAP always reflects
     # the molecule's current elemental composition after in-place mutation.
     if molecule.symbols is None:
         raise ValueError("Cannot compute SOAP for a molecule with no atoms.")
-    return [str(s) for s in list(molecule.symbols)]
-
-
-def _validate_symbols(symbols: Sequence[str]) -> None:
-    """Raise if any symbol is not a standard element in the periodic table."""
-    for symbol in symbols:
-        if symbol not in _PERIODIC_TABLE.PERIODIC_TABLE:
-            raise ValueError(
-                f"Unrecognized elemental symbol for SOAP: {symbol!r}. "
-                "Use standard chemical element symbols (e.g. 'H' not 'D')."
-            )
+    return [_canonicalize_symbol(s) for s in list(molecule.symbols)]
 
 
 def _dscribe_species_index_map(species_list: Sequence[str]) -> dict[str, int]:
@@ -453,7 +474,8 @@ def calculate_soap(
             When ``None``, a sorted unique list of the molecule's own elements
             is used (convenient for a single structure). For comparable
             descriptors across a dataset, pass a shared species list that
-            covers every element present in the dataset.
+            covers every element present in the dataset. Symbols are
+            case-normalized (``fe`` → ``Fe``).
         centers: Optional 1-based atom indices on which to evaluate SOAP.
             When ``None``, every atom is used as a center. Order is preserved
             and duplicate indices are kept (they overweight ``"mean"`` /
@@ -495,7 +517,6 @@ def calculate_soap(
     symbols = _live_symbols(molecule)
     if len(symbols) == 0:
         raise ValueError("Cannot compute SOAP for a molecule with no atoms.")
-    _validate_symbols(symbols)
     positions = _validate_positions(molecule.positions, len(symbols))
     species_list = _normalize_species(species, symbols)
     center_indices = _normalize_centers(centers, len(symbols))

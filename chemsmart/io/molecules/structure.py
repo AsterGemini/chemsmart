@@ -2908,7 +2908,8 @@ class Molecule:
             species (sequence of str, optional): Explicit SOAP species
                 basis. When omitted, a sorted unique list of this
                 molecule's elements is used. Pass a shared list for
-                comparable features across a dataset. Channel order is
+                comparable features across a dataset. Symbols are
+                case-normalized (``fe`` → ``Fe``). Channel order is
                 by atomic number (not list order).
             centers (sequence of int, optional): 1-based atom indices on
                 which to evaluate SOAP. When omitted, all atoms are used.

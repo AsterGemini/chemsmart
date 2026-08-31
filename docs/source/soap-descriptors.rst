@@ -78,8 +78,9 @@ species list that covers every element present in the dataset:
    species = ["H", "C", "N", "O", "Fe"]
    features = mol.calculate_soap(species=species, aggregation="mean")
 
-Only standard chemical element symbols are accepted (for example ``"H"``, not deuterium ``"D"``). Internally, species
-channels are ordered by atomic number (matching DScribe's convention).
+Only standard chemical element symbols are accepted (for example ``"H"``, not deuterium ``"D"``). Symbols are
+case-normalized (``"fe"`` → ``"Fe"``). Internally, species channels are ordered by atomic number (matching DScribe's
+convention).
 
 ***********************************
  Supported systems and limitations

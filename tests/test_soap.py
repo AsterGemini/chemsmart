@@ -502,6 +502,12 @@ class TestValidation:
     def test_species_unrecognized_symbol(self, water_molecule):
         with pytest.raises(ValueError, match="Unrecognized elemental symbol"):
             calculate_soap(water_molecule, species=["H", "O", "Xx"])
+        with pytest.raises(ValueError, match="Unrecognized elemental symbol"):
+            calculate_soap(water_molecule, species=["H", "O", "Zz"])
+        with pytest.raises(ValueError, match="Unrecognized elemental symbol"):
+            calculate_soap(water_molecule, species=["H", "O", ""])
+        with pytest.raises(ValueError, match="Unrecognized elemental symbol"):
+            calculate_soap(water_molecule, species=["H", "O", "---"])
 
     def test_non_molecule_type(self):
         with pytest.raises(TypeError, match="Molecule"):
@@ -556,6 +562,47 @@ class TestValidation:
         )
         expected = soap_reference["sulfur_species_HOS"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
+
+    def test_mixed_case_molecule_symbols_match_canonical(self, water_molecule):
+        mixed = Molecule(
+            symbols=["o", "h", "h"],
+            positions=water_molecule.positions.copy(),
+        )
+        a = calculate_soap(water_molecule, n_max=4, l_max=2)
+        b = calculate_soap(mixed, n_max=4, l_max=2)
+        np.testing.assert_allclose(a, b, rtol=RTOL, atol=ATOL)
+
+    def test_mixed_case_species_list_match_canonical(self, water_molecule):
+        a = calculate_soap(
+            water_molecule, species=["H", "C", "O", "N"], n_max=4, l_max=2
+        )
+        b = calculate_soap(
+            water_molecule, species=["h", "c", "o", "n"], n_max=4, l_max=2
+        )
+        np.testing.assert_allclose(a, b, rtol=RTOL, atol=ATOL)
+
+    def test_whitespace_padded_symbols_match_canonical(self, water_molecule):
+        padded = Molecule(
+            symbols=[" O", "H ", "H"],
+            positions=water_molecule.positions.copy(),
+        )
+        a = calculate_soap(water_molecule, n_max=4, l_max=2)
+        b = calculate_soap(padded, n_max=4, l_max=2)
+        np.testing.assert_allclose(a, b, rtol=RTOL, atol=ATOL)
+
+    def test_lowercase_deuterium_rejected(self):
+        mol = Molecule(
+            symbols=["O", "H", "d"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.1],
+                    [0.0, 0.7, -0.5],
+                    [0.0, -0.7, -0.5],
+                ]
+            ),
+        )
+        with pytest.raises(ValueError, match="Unrecognized elemental symbol"):
+            calculate_soap(mol, n_max=4, l_max=2)
 
 
 class TestDocumentedLimitations:
