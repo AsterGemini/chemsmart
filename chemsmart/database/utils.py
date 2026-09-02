@@ -46,7 +46,7 @@ def check_schema_version(db_file):
     if version != SCHEMA_VERSION:
         raise RuntimeError(
             f"Database schema version mismatch: expected {SCHEMA_VERSION}, got {version}. "
-            f"Re-assemble the database with the current version of chemsmart."
+            f"Re-assemble the database with the current version of CHEMSMART."
         )
 
 
