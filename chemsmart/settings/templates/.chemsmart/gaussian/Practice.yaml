@@ -1,0 +1,13 @@
+# Practice project for gas-phase DFT (identity SN2 tutorial).
+# Method: B3LYP-D3BJ / 6-31+G(d). Diffuse functions (+) for anions.
+# `gas` has no solvent — opt/ts/irc/scan stay in the gas phase.
+# `solv` is only used for single-point jobs if you add implicit solvent later.
+gas:
+  functional: "b3lyp empiricaldispersion=gd3bj"
+  basis: "6-31+G(d)"
+solv:
+  functional: "b3lyp empiricaldispersion=gd3bj"
+  basis: "6-31+G(d)"
+  freq: False
+  solvent_model: smd
+  solvent_id: water

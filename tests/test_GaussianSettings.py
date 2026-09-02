@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -103,6 +104,38 @@ class TestGaussianJobSettings:
         assert sp_settings.basis == "def2tzvp"
         assert sp_settings.solvent_model == "smd"
         assert sp_settings.solvent_id == "toluene"
+
+    def test_practice_template_yaml_is_gas_phase_b3lyp_d3bj(self):
+        practice_yaml = (
+            Path(__file__).resolve().parents[1]
+            / "chemsmart"
+            / "settings"
+            / "templates"
+            / ".chemsmart"
+            / "gaussian"
+            / "Practice.yaml"
+        )
+        all_project_settings = read_molecular_job_yaml(
+            str(practice_yaml), program="gaussian"
+        )
+        opt_settings = GaussianJobSettings.from_dict(
+            all_project_settings["opt"]
+        )
+        assert opt_settings.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert opt_settings.basis == "6-31+G(d)"
+        assert opt_settings.solvent_model is None
+        assert opt_settings.solvent_id is None
+        assert opt_settings.freq is True
+
+        ts_settings = GaussianJobSettings.from_dict(all_project_settings["ts"])
+        assert ts_settings.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert ts_settings.basis == "6-31+G(d)"
+        assert ts_settings.solvent_model is None
+
+        sp_settings = GaussianJobSettings.from_dict(all_project_settings["sp"])
+        assert sp_settings.freq is False
+        assert sp_settings.solvent_model == "smd"
+        assert sp_settings.solvent_id == "water"
 
     def test_read_gaussian_hf_comfile(self, hf_com_filepath):
         settings = GaussianJobSettings.from_comfile(hf_com_filepath)
