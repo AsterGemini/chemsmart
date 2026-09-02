@@ -2,7 +2,7 @@
 CLI options for ALL jobs that can be run in this package.
 
 This module provides common command-line interface decorators and options
-that are shared across different job types in the chemsmart package.
+that are shared across different job types in the CHEMSMART package.
 """
 
 import functools
@@ -209,7 +209,7 @@ def click_file_label_and_index_options(f):
         help="Index of molecules to use; 1-based indices. "
         "If not specified, all molecules are passed to the job. "
         "Jobs that need only one molecule will use the last one. "
-        "For chemsmart database files (.db), use together with --ri/--rid "
+        "For CHEMSMART database files (.db), use together with --ri/--rid "
         "to select a structure index within the selected record.",
     )
     @functools.wraps(f)

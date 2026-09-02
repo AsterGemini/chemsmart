@@ -374,7 +374,7 @@ def mol(
 ):
     """
     CLI subcommand for running PyMOL visualization
-    jobs using the chemsmart framework.
+    jobs using the CHEMSMART framework.
 
     Example usage:
         chemsmart run mol -f test.xyz visualize -c
@@ -435,13 +435,13 @@ def mol(
         )
         if selector_count != 1:
             raise click.UsageError(
-                "For chemsmart database input, select exactly one of "
+                "For CHEMSMART database input, select exactly one of "
                 "--ri/--record-index, --rid/--record-id, "
                 "--sid/--structure-id, or --mid/--molecule-id."
             )
         if index is not None and not any(record_selectors):
             raise click.UsageError(
-                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "For CHEMSMART database input, -i/--index (or --si/--structure-index) "
                 "can only be used together with --ri/--record-index or --rid/--record-id."
             )
 

@@ -1354,7 +1354,7 @@ def get_prepend_string_list_from_modred_free_format(
     e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
     program: gaussian or orca, variable to decide the index to start from
     Gaussian starts from 1, while orca starts from 0
-    For chemsmart applications in homogeneous
+    For CHEMSMART applications in homogeneous
     catalysis, we will use 1-indexing throughout,
     since this is what we usually see when we use
     GaussView or Avogadro to visualise the structures.

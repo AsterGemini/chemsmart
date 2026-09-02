@@ -192,7 +192,7 @@ class GaussianProjectSettings(RegistryMixin):
         if user_project_settings is not None:
             return user_project_settings
         else:
-            # Fall back to chemsmart test project settings
+            # Fall back to CHEMSMART test project settings
             chemsmart_test_project_settings = (
                 cls._from_chemsmart_test_projects(project)
             )
@@ -252,7 +252,7 @@ class GaussianProjectSettings(RegistryMixin):
     @classmethod
     def _from_chemsmart_test_projects(cls, project_name):
         """
-        Load project settings from chemsmart test projects directory.
+        Load project settings from CHEMSMART test projects directory.
 
         Args:
             project_name (str): Name of the test project configuration.

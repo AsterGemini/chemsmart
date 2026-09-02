@@ -73,7 +73,7 @@ def export(
     method_basis,
     output,
 ):
-    """Export records from a chemsmart database.
+    """Export records from a CHEMSMART database.
 
     The output format is inferred from the file extension of -o/--output:
 
@@ -119,7 +119,7 @@ def export(
 
     if not is_chemsmart_database(file):
         raise click.UsageError(
-            f"File {file} is not a valid chemsmart database file."
+            f"File {file} is not a valid CHEMSMART database file."
         )
     try:
         check_schema_version(file)

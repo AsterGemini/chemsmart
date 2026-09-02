@@ -133,7 +133,7 @@ class DatabaseFile(FileMixin):
         return molecules if len(molecules) != 1 else molecules[0]
 
     def get_all_molecules(self, return_list=False):
-        """Get all molecules from the chemsmart database."""
+        """Get all molecules from the CHEMSMART database."""
         db = Database(self.filename)
         all_structs = db.get_all_structures()
         molecules = [self.build_molecule_from_database(s) for s in all_structs]

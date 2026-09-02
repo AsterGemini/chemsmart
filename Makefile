@@ -133,44 +133,44 @@ pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
 	@echo Pre-commit hooks installed. They will run automatically on each commit.
 
 .PHONY: configure
-configure:        ## Run chemsmart configuration interactively.
+configure:        ## Run CHEMSMART configuration interactively.
 ifeq ($(OS_FAMILY),Windows)
-	@echo Running chemsmart configuration...
+	@echo Running CHEMSMART configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
-	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@echo Updating chemsmart project templates...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
-	@echo Updating existing chemsmart server configurations...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
+	@echo Running CHEMSMART server configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: CHEMSMART server configuration failed." && exit 1 )
+	@echo Updating CHEMSMART project templates...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: CHEMSMART project template update failed." && exit 1 )
+	@echo Updating existing CHEMSMART server configurations...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: CHEMSMART server configuration update failed." && exit 1 )
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
-	@echo  chemsmart paths have been registered in your shell profile.
-	@echo  To activate chemsmart in your current session:
+	@echo  CHEMSMART paths have been registered in your shell profile.
+	@echo  To activate CHEMSMART in your current session:
 	@echo    Git Bash:        source ~/.bashrc
 	@echo    Conda PowerShell: . $$PROFILE
 	@echo  Or open a new terminal window.
 	@echo ===========================================================
 else
-	@echo Running chemsmart configuration...
+	@echo Running CHEMSMART configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
-	@echo Running chemsmart server configuration...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
-	@echo Updating chemsmart project templates...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
-	@echo Updating existing chemsmart server configurations...
-	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
+	@echo Running CHEMSMART server configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: CHEMSMART server configuration failed." && exit 1 )
+	@echo Updating CHEMSMART project templates...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: CHEMSMART project template update failed." && exit 1 )
+	@echo Updating existing CHEMSMART server configurations...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: CHEMSMART server configuration update failed." && exit 1 )
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
-	@echo " chemsmart paths have been written to your shell config."
+	@echo " CHEMSMART paths have been written to your shell config."
 	@echo "==========================================================="
 	@for rc in "$${HOME}/.bashrc" "$${HOME}/.zshrc" "$${HOME}/.profile"; do \
 		if [ -f "$$rc" ]; then . "$$rc" 2>/dev/null || true; fi; \
 	done; \
-	echo "chemsmart is now active for the current make session."; \
-	echo "To activate chemsmart in your current terminal, run:"; \
+	echo "CHEMSMART is now active for the current make session."; \
+	echo "To activate CHEMSMART in your current terminal, run:"; \
 	if [ -f "$${HOME}/.bashrc" ]; then echo "  source ~/.bashrc  (bash / Git Bash)"; fi; \
 	if [ -f "$${HOME}/.zshrc" ]; then echo "  source ~/.zshrc   (zsh)"; fi; \
 	if [ -f "$${HOME}/.profile" ]; then echo "  source ~/.profile (sh / other)"; fi; \
@@ -194,7 +194,7 @@ endif
 update-deps:          ## Automatically update new packages that are added in the codes
 	@echo Updating additional dependencies to pyproject.toml file...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) update deps
-	@echo Reinstalling chemsmart package...
+	@echo Reinstalling CHEMSMART package...
 	$(ENV_PREFIX)pip install -e .[dev,test]
 
 .PHONY: fmt

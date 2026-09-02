@@ -867,7 +867,7 @@ class ConfigurationUpdater(Updater):
 @click.group(name="update")
 def update():
     """
-    Manage updates in the chemsmart package.
+    Manage updates in the CHEMSMART package.
     """
 
 
@@ -891,7 +891,7 @@ def deps():
 )
 def version(version_number: str):
     """
-    Automatically update chemsmart version in chemsmart/VERSION,
+    Automatically update CHEMSMART version in chemsmart/VERSION,
     pyproject.toml and docs/source/conf.py.
     """
     logger.info("Updating version number...")

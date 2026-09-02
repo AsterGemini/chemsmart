@@ -9,7 +9,7 @@ The module defines:
     - inp: Command for executing ORCA input files as-is
 
 This is useful when you have already prepared ORCA input files and want
-to run them through the chemsmart job management system without any
+to run them through the CHEMSMART job management system without any
 additional processing or modification.
 """
 

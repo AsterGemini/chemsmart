@@ -123,7 +123,7 @@ class CRESTJobSettings:
         structure_index="-1",
         structure_id=None,
     ):
-        """Create job settings from a chemsmart database file.
+        """Create job settings from a CHEMSMART database file.
 
         With record selectors (record_index/record_id), this fills
         charge/multiplicity from the selected structure and, when present in
@@ -157,7 +157,7 @@ class CRESTJobSettings:
             settings.charge = structure.get("charge")
             settings.multiplicity = structure.get("multiplicity")
             settings.title = (
-                "Job prepared from chemsmart database "
+                "Job prepared from CHEMSMART database "
                 f"{os.path.basename(filepath)}"
             )
             logger.info(
@@ -200,7 +200,7 @@ class CRESTJobSettings:
         settings.solvent_model = meta.get("solvent_model")
         settings.solvent_id = meta.get("solvent_id")
         settings.title = (
-            "Job prepared from chemsmart database "
+            "Job prepared from CHEMSMART database "
             f"{os.path.basename(filepath)}"
         )
         logger.info(

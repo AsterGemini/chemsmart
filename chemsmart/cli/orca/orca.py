@@ -459,7 +459,7 @@ def orca(
     pubchem,
 ):
     """
-    Main CLI command group for running ORCA jobs using the chemsmart framework.
+    Main CLI command group for running ORCA jobs using the CHEMSMART framework.
 
     This function serves as the primary entry point for all ORCA quantum
     chemistry calculations. It processes command-line arguments, configures
@@ -487,13 +487,13 @@ def orca(
         record_selectors = [record_index is not None, record_id is not None]
         if sum(record_selectors) + (structure_id is not None) != 1:
             raise click.UsageError(
-                "For chemsmart database input, select exactly one of "
+                "For CHEMSMART database input, select exactly one of "
                 "--ri/--record-index, --rid/--record-id, or "
                 "--sid/--structure-id."
             )
         if index is not None and not any(record_selectors):
             raise click.UsageError(
-                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "For CHEMSMART database input, -i/--index (or --si/--structure-index) "
                 "can only be used together with --ri/--record-index or --rid/--record-id."
             )
 
@@ -565,7 +565,7 @@ def orca(
             logger.info(f"Loaded ORCA settings from database file: {filename}")
         else:
             logger.debug(
-                f"File {filename} is not a valid chemsmart database file."
+                f"File {filename} is not a valid CHEMSMART database file."
             )
             job_settings = ORCAJobSettings.default()
     elif is_pka_table_input or (

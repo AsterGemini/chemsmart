@@ -62,7 +62,7 @@ def click_query_options(f):
 @click_query_options
 @click.pass_context
 def query(ctx, file, target, query, limit):
-    """Query records, molecules, or structures from a chemsmart database.
+    """Query records, molecules, or structures from a CHEMSMART database.
 
     Use -t, --target to switch the query perspective:
 
@@ -109,7 +109,7 @@ def query(ctx, file, target, query, limit):
 
     if not is_chemsmart_database(file):
         raise click.UsageError(
-            f"File {file} is not a valid chemsmart database file."
+            f"File {file} is not a valid CHEMSMART database file."
         )
     try:
         check_schema_version(file)

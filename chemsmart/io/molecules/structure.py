@@ -1211,18 +1211,18 @@ class Molecule:
                     return_list=return_list,
                     **kwargs,
                 )
-            # Non-chemsmart .db: try ASE database reader, raise a friendly
+            # Non-CHEMSMART .db: try ASE database reader, raise a friendly
             # error if the file is also not a valid ASE database.
             try:
                 result = cls._read_other(filepath, index, **kwargs)
             except Exception as exc:
                 raise ValueError(
-                    f"File {filepath} is neither a valid chemsmart database "
+                    f"File {filepath} is neither a valid CHEMSMART database "
                     "nor an ASE database file."
                 ) from exc
             if isinstance(result, list) and len(result) == 0:
                 raise ValueError(
-                    f"File {filepath} is neither a valid chemsmart database "
+                    f"File {filepath} is neither a valid CHEMSMART database "
                     "nor an ASE database file."
                 )
             return result
@@ -1388,10 +1388,10 @@ class Molecule:
         structure_id=None,
         molecule_id=None,
     ):
-        """Read molecules from a chemsmart database file (.db).
+        """Read molecules from a CHEMSMART database file (.db).
 
         Args:
-            filepath (str): Path to the chemsmart .db file.
+            filepath (str): Path to the CHEMSMART .db file.
             return_list (bool): If True, always return a list.
             record_index (int, optional): 1-based record index to select.
             record_id (str, optional): Full record ID or unique prefix.

@@ -4002,7 +4002,7 @@ H       1.0 0.0 0.0
     def test_db_neither_chemsmart_nor_ase(self, tmpdir):
         db = os.path.join(str(tmpdir), "fake.db")
         open(db, "wb").write(b"not a database")
-        with pytest.raises(ValueError, match="neither a valid chemsmart"):
+        with pytest.raises(ValueError, match="neither a valid CHEMSMART"):
             Molecule.from_filepath(db)
 
     def test_delete_atoms_paths(self, gaussian_benzene_opt_outfile):

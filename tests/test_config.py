@@ -448,7 +448,7 @@ class TestUpdatePowershellProfiles:
         assert "C:\\old\\cli" not in content
         # New alias must be present
         assert "Set-Alias -Name chemsmart -Value chemsmart.exe" in content
-        # Original non-chemsmart content must be preserved
+        # Original non-CHEMSMART content must be preserved
         assert "some existing content" in content
 
 

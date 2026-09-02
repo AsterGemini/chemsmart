@@ -42,7 +42,7 @@ def inspect(
     molecule_id,
     structure_id,
 ):
-    """Inspect a chemsmart database, record, molecule, or structure.
+    """Inspect a CHEMSMART database, record, molecule, or structure.
 
     Without entity options, show a database overview (metadata and statistics).
     With --ri or --rid, show detailed information for one record.
@@ -74,7 +74,7 @@ def inspect(
 
     if not is_chemsmart_database(file):
         raise click.UsageError(
-            f"File {file} is not a valid chemsmart database file."
+            f"File {file} is not a valid CHEMSMART database file."
         )
     try:
         check_schema_version(file)

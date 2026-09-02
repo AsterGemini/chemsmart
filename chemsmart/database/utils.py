@@ -29,7 +29,7 @@ ROUTE_PREFIX_TOKENS = {"#", "#p", "#n", "#t", "!"}
 
 
 def open_connection(db_file):
-    """Open a SQLite connection with chemsmart's standard pragmas."""
+    """Open a SQLite connection with CHEMSMART's standard pragmas."""
     conn = sqlite3.connect(db_file, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA synchronous = NORMAL")
@@ -51,9 +51,9 @@ def check_schema_version(db_file):
 
 
 def is_chemsmart_database(filepath):
-    """Check if a .db file is a chemsmart database.
+    """Check if a .db file is a CHEMSMART database.
 
-    A valid chemsmart database contains the four tables:
+    A valid CHEMSMART database contains the four tables:
     'records', 'molecules', 'structures', and 'record_structures'.
     """
     if not is_database_file(filepath):

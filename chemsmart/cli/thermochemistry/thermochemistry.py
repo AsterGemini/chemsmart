@@ -205,7 +205,7 @@ def thermochemistry(
 ):
     """
     CLI subcommand for running thermochemistry
-    jobs using the chemsmart framework.
+    jobs using the CHEMSMART framework.
 
     This command allows you to compute thermochemistry for Gaussian, ORCA,
     or xTB output files.

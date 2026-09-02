@@ -22,7 +22,7 @@ create_logger(debug=True, stream=True)
 
 class Config:
     """
-    Central configuration helper for chemsmart.
+    Central configuration helper for CHEMSMART.
 
     The class is organised into five logical sections:
 
@@ -79,10 +79,10 @@ class Config:
 
     @property
     def chemsmart_package_path(self):
-        """Absolute path to the root of the chemsmart source/install tree."""
+        """Absolute path to the root of the CHEMSMART source/install tree."""
         chemsmart_path = Path(__file__).resolve().parent / ".." / ".."
         chemsmart_path = os.path.abspath(chemsmart_path)
-        logger.debug(f"chemsmart package path: {chemsmart_path}")
+        logger.debug(f"CHEMSMART package path: {chemsmart_path}")
         return chemsmart_path
 
     # ------------------------------------------------------------------ #

@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 @click.group(name="database", cls=MyGroup)
 @click.pass_context
 def database(ctx):
-    """CLI for chemsmart database operations."""
+    """CLI for CHEMSMART database operations."""
     pass
 
 
 def click_database_id_options(f):
-    """CLI options for selecting records/molecules/structures from a chemsmart database
-    by ID or index. Only relevant when the input file (-f) is a chemsmart database (.db).
+    """CLI options for selecting records/molecules/structures from a CHEMSMART database
+    by ID or index. Only relevant when the input file (-f) is a CHEMSMART database (.db).
     """
 
     @click.option(
@@ -26,7 +26,7 @@ def click_database_id_options(f):
         "record_index",
         type=int,
         default=None,
-        help="Record index (1-based) within a chemsmart database.",
+        help="Record index (1-based) within a CHEMSMART database.",
     )
     @click.option(
         "--rid",
@@ -34,7 +34,7 @@ def click_database_id_options(f):
         "record_id",
         type=str,
         default=None,
-        help="Record ID (or unique prefix) within a chemsmart database.",
+        help="Record ID (or unique prefix) within a CHEMSMART database.",
     )
     @click.option(
         "--si",
@@ -50,7 +50,7 @@ def click_database_id_options(f):
         "structure_id",
         type=str,
         default=None,
-        help="Global structure ID (or unique prefix) within a chemsmart database.",
+        help="Global structure ID (or unique prefix) within a CHEMSMART database.",
     )
     @click.option(
         "--mid",

@@ -1,6 +1,6 @@
 """
 Database query module for querying records, molecules, or structures
-from a chemsmart database.
+from a CHEMSMART database.
 
 Supports three query targets via the --target option:
 - records (default): Query calculation records.
@@ -180,13 +180,13 @@ TARGET_CONFIG = {
 
 
 class DatabaseQuery:
-    """Query and filter records, molecules, or structures from a chemsmart database."""
+    """Query and filter records, molecules, or structures from a CHEMSMART database."""
 
     def __init__(self, db_file, query_string, target="records", limit=None):
         """Initialize a database query.
 
         Args:
-            db_file: Path to the chemsmart database file.
+            db_file: Path to the CHEMSMART database file.
             query_string: Optional query expression to filter results.
             target: Query target — "records", "molecules", or "structures".
             limit: Maximum number of results to return.

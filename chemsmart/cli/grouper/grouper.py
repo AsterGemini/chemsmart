@@ -144,7 +144,7 @@ def click_grouper_common_options(f):
         "G (Gibbs free energy), qhH (quasi-harmonic enthalpy), qhG (quasi-harmonic Gibbs free energy), "
         "sp_qhG (single-point corrected quasi-harmonic Gibbs free energy)."
         "Note: not for xyz file. "
-        "When using qhH, qhG and sp_qhG, chemsmart will call thermochemistry for thermo correction, "
+        "When using qhH, qhG and sp_qhG, CHEMSMART will call thermochemistry for thermo correction, "
         "Users can specify the thermo-correction parameter.",
     )
     @functools.wraps(f)

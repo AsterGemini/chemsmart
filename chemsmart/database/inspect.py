@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseInspector:
-    """Inspect a chemsmart database.
+    """Inspect a CHEMSMART database.
 
     Provides five views:
     Overview – database-level metadata and statistics

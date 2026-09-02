@@ -499,7 +499,7 @@ class Database:
         return count
 
     def get_connection(self):
-        """Get a database connection with chemsmart's standard pragmas."""
+        """Get a database connection with CHEMSMART's standard pragmas."""
         return open_connection(self.db_file)
 
     def count_records(self):

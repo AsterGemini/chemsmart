@@ -220,13 +220,13 @@ def xtb(
         record_selectors = [record_index is not None, record_id is not None]
         if sum(record_selectors) + (structure_id is not None) != 1:
             raise click.UsageError(
-                "For chemsmart database input, select exactly one of "
+                "For CHEMSMART database input, select exactly one of "
                 "--ri/--record-index, --rid/--record-id, or "
                 "--sid/--structure-id."
             )
         if index is not None and not any(record_selectors):
             raise click.UsageError(
-                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "For CHEMSMART database input, -i/--index (or --si/--structure-index) "
                 "can only be used together with --ri/--record-index or --rid/--record-id."
             )
 
@@ -258,7 +258,7 @@ def xtb(
             )
         else:
             logger.debug(
-                f"File {filename} is not a valid chemsmart database file."
+                f"File {filename} is not a valid CHEMSMART database file."
             )
             job_settings = XTBJobSettings.default()
     else:

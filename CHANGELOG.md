@@ -90,7 +90,7 @@ Changelog
 - Relax setuptools version. [Zhang Xinglong]
 - Updated Makefile to remove poetry. [Zhang Xinglong]
 - Fix Makefile to use conda. [Zhang Xinglong]
-- Chemsmart config. [Xinglong Zhang]
+- chemsmart config. [Xinglong Zhang]
 - Fix config ctx. [Xinglong Zhang]
 - Config as a class. [Xinglong Zhang]
 - Updated readme for installation instructions. [Xinglong Zhang]
@@ -422,7 +422,7 @@ Changelog
   atoms in molecule) 1-indexed. [Xinglong Zhang]
 - Master crest job to run modred, scan, opt, ts etc. [Xinglong Zhang]
 - Rename modredundant to modred. [Xinglong Zhang]
-- Chemsmart run -s SLURM --debug gaussian -p dee -f crest_conformers.xyz
+- chemsmart run -s SLURM --debug gaussian -p dee -f crest_conformers.xyz
   -l cc -c 0 -m 1 crest -j modred -c [1,2] -n 5 -R. [Xinglong Zhang]
 - Add crest job to run all jobs from crest. [Xinglong Zhang]
 - Added crest command to run crest jobs. [Xinglong Zhang]
@@ -512,7 +512,7 @@ Changelog
 - Added script to obtain natural charges from NBO calcs. [Xinglong
   Zhang]
 - Black length fix. [Xinglong Zhang]
-- Chemsmart as executable. [Xinglong Zhang]
+- chemsmart as executable. [Xinglong Zhang]
 - Initial cli files. [Xinglong Zhang]
 - Merge pull request #34 from xinglong-zhang/gaussian_io. [Xinglong
   Zhang]

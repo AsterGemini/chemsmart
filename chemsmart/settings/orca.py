@@ -311,7 +311,7 @@ class ORCAProjectSettings(RegistryMixin):
         """
         Load YAML project settings from test projects directory.
 
-        Searches for project settings in the chemsmart test projects directory,
+        Searches for project settings in the CHEMSMART test projects directory,
         typically used for built-in example configurations.
 
         Args:

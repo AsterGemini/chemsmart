@@ -130,7 +130,7 @@ def iterate(
     **kwargs,
 ):
     """
-    CLI subcommand for running iterate jobs using the chemsmart framework.
+    CLI subcommand for running iterate jobs using the CHEMSMART framework.
 
     This command generates new molecular structures by attaching substituents
     to skeleton molecules at specified positions.

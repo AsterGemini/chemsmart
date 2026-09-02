@@ -1,5 +1,5 @@
 """
-Database export module for exporting records from a chemsmart database.
+Database export module for exporting records from a CHEMSMART database.
 
 Output format is inferred from the file extension of the output path:
 * .json   – Full structured records.
@@ -50,7 +50,7 @@ SUPPORTED_FORMATS = {".json", ".csv", ".xyz", ".extxyz"}
 
 
 class DatabaseExporter:
-    """Export a chemsmart database to JSON, CSV, XYZ, or extended XYZ."""
+    """Export a CHEMSMART database to JSON, CSV, XYZ, or extended XYZ."""
 
     def __init__(
         self,

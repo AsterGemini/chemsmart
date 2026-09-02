@@ -1,7 +1,7 @@
 """
-CLI interface for chemsmart project.
+CLI interface for the CHEMSMART project.
 
-This module provides the main entry point for the chemsmart command-line
+This module provides the main entry point for the CHEMSMART command-line
 interface, organizing various subcommands and providing the ASCII art
 banner display.
 """
@@ -23,7 +23,7 @@ from .update import update
 @click.option("--verbose", is_flag=True, default=True)
 def entry_point(ctx, verbose):
     """
-    Main entry point for the chemsmart CLI.
+    Main entry point for the CHEMSMART CLI.
     """
     if verbose:
         debug = True

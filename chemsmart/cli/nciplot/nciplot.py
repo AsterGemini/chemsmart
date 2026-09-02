@@ -188,7 +188,7 @@ def nciplot(
     **kwargs,
 ):
     """
-    CLI subcommand for running NCIPLOT jobs using the chemsmart framework.
+    CLI subcommand for running NCIPLOT jobs using the CHEMSMART framework.
 
     NCIPLOT uses different density calculation
     methods based on input file type:
