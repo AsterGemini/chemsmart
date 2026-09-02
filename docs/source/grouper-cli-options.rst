@@ -272,7 +272,7 @@ Supported energy types:
 
 **Thermochemistry corrections:**
 
-When using ``qhH``, ``qhG``, or ``sp_qhG``, chemsmart leverages the internal thermochemistry module to compute corrected
+When using ``qhH``, ``qhG``, or ``sp_qhG``, CHEMSMART leverages the internal thermochemistry module to compute corrected
 thermodynamic values. Additional thermochemistry CLI options (e.g., temperature, concentration, frequency cutoffs,
 entropy method) become available.
 
