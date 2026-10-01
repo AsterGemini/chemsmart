@@ -25,7 +25,8 @@ Scientific acceptance of a TS stays with the user (final OK). Every submit stays
 
 Prints nimag, imaginary frequency, charge/mult, the top-8 heavy-atom pair projections (no cutoff, with distances; header
 notes ``projections from 2-decimal displacements``), spec-bond ranks, and Zmax (information only). Every negative
-frequency is counted in nimag. Any with absolute value under 15 cm^-1 also prints ``small imag (<15): judge``.
+frequency is counted in nimag. Any with absolute value under 15 cm^-1 also prints ``small imag present (<15 cm⁻¹);
+counted in nimag``.
 
 Hard rejects
 ============
@@ -33,11 +34,14 @@ Hard rejects
 The only hard TS rejects are:
 
 -  ``nimag≠1`` — hard reject. ``--force`` does not override. A second small imaginary frequency makes nimag=2 and is
-   this reject; the small-imag line is still printed.
+   this reject. The line ``small imag present (<15 cm⁻¹); counted in nimag`` is still printed.
+
 -  Primary spec bond not #1 among heavy-atom pairs with r ≤ 3.2 Å — reject that ``--force`` overrides. The rank is
    printed on this path.
+
 -  Every spec-bond projection about 0 (below 0.03, the 2-decimal noise floor) — reject text is ``spec bonds not
-   displaced in mode``. No rank is quoted. ``--force`` does not apply.
+   displaced in mode``. No rank is quoted. ``--force`` overrides this to ``CANDIDATE: judge mode`` and records the
+   override, still without a rank.
 
 Judge states (exit 0, not REJECT)
 =================================

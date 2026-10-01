@@ -44,8 +44,9 @@ Count Chi's manual actions per verified TS.
    `--force` does not override) and primary spec bond not #1 within 3.2 Å
    (`--force` overrides; rank printed on that path). If every spec-bond
    projection is about 0, the reject is `spec bonds not displaced in mode`
-   and does not quote a rank. A negative with |freq| < 15 cm⁻¹ prints
-   `small imag (<15): judge` and is still counted in nimag.
+   and does not quote a rank. `--force` overrides that reject too and
+   records the override. A negative with |freq| < 15 cm⁻¹ prints
+   `small imag present (<15 cm⁻¹); counted in nimag` and is still counted.
 3. Route and 0/1 charge/mult checked against the three expected MN15/def2svp
    routes. Neg1-style routes are flagged. Flags do not turn a CANDIDATE
    into REJECT.
@@ -82,9 +83,9 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 | --- | --- |
 | Parse nimag / imag / charge/mult / top-8 / spec ranks / Zmax | Mechanical; Zmax is printed only |
 | Hard reject nimag≠1 (every negative counted) | Robust on the benchmark set |
-| Print `small imag (<15): judge` for \|freq\| < 15 cm⁻¹ | Not dropped silently; still counted |
+| Print `small imag present (<15 cm⁻¹); counted in nimag` | Not dropped silently; nimag≥2 from a tiny mode stays REJECT |
 | Reject primary bond not #1 within 3.2 Å (`--force` override) | Rank printed on this path only |
-| Reject `spec bonds not displaced in mode` when every spec projection is ~0 | Neg2's tie-order rank is meaningless; no rank quoted |
+| Reject `spec bonds not displaced in mode` when every spec projection is ~0 (`--force` override) | No meaningful rank; override does not quote one |
 | Route and 0/1 charge/mult flag | Catches Neg1's old route without auto-rejecting |
 | `ENDPOINT NOT MIN` when an endpoint opt has nimag≠0 | Judge state, not a hard reject |
 | `connectivity mismatch: judge` when set bond criteria fail | Judge state, not a hard reject |

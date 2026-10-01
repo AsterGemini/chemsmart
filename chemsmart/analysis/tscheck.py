@@ -429,7 +429,7 @@ def check_ts_log(
     if imag_freq is not None:
         lines.append(f"imaginary frequency: {imag_freq:.4f} cm^-1")
     if small:
-        lines.append("small imag (<15): judge")
+        lines.append("small imag present (<15 cm⁻¹); counted in nimag")
         for freq_small in small:
             lines.append(f"  {freq_small:.4f} cm^-1")
     lines.append(f"charge/mult: {charge} {multiplicity}")
@@ -525,10 +525,23 @@ def check_ts_log(
         abs(all_hit["proj"]) < SPEC_PROJ_ZERO for _, all_hit, _ in hits
     )
     if undisplaced:
-        report.verdict = "REJECT"
-        report.reasons.append("spec bonds not displaced in mode")
-        lines.append("spec bonds not displaced in mode")
+        msg = "spec bonds not displaced in mode"
+        if not force:
+            report.verdict = "REJECT"
+            report.reasons.append(msg)
+            lines.append(msg)
+            lines.append(f"verdict: {report.verdict}")
+            return report
+        # No meaningful rank to print. Record the override and finish
+        # as a candidate. nimag≠1 is the only non-overridable reject.
+        report.force_used = True
+        report.reasons.append(msg + " [--force override]")
+        lines.append(msg + " [--force override]")
+        if report.route_flag:
+            report.reasons.append("route or charge/mult mismatch")
+        report.verdict = "CANDIDATE: judge mode"
         lines.append(f"verdict: {report.verdict}")
+        lines.append("Mode judgment stays manual. This is not a verified TS.")
         return report
 
     lines.append("spec-bond ranks:")

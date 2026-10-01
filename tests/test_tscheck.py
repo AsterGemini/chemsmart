@@ -347,9 +347,24 @@ class TestCheckTS:
         report = check_ts_log(rotor_log, spec)
         text = report.text()
         assert report.verdict == "REJECT"
+        assert report.force_used is False
         assert "spec bonds not displaced in mode" in text
+        assert "[--force override]" not in text
         assert "rank" not in text.lower()
         assert "Primary spec bond not #1" not in text
+
+    def test_force_overrides_undisplaced_spec_bonds(
+        self, rotor_log, case_yaml
+    ):
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(rotor_log, spec, force=True)
+        text = report.text()
+        assert report.verdict == "CANDIDATE: judge mode"
+        assert report.force_used is True
+        assert "spec bonds not displaced in mode [--force override]" in text
+        assert "rank" not in text.lower()
+        assert "Primary spec bond not #1" not in text
+        assert "REJECT" not in text
 
     def test_force_overrides_primary_rank(self, offrank_log, case_yaml):
         spec = load_case_spec(case_yaml)
@@ -368,7 +383,9 @@ class TestCheckTS:
         report = check_ts_log(small_imag_log, spec)
         assert report.nimag == 2
         assert report.verdict == "REJECT"
-        assert "small imag (<15): judge" in report.text()
+        assert (
+            "small imag present (<15 cm⁻¹); counted in nimag" in report.text()
+        )
         assert "-8.2000" in report.text()
 
     def test_nimag_zero_hard_reject(self, opt_log, case_yaml):
