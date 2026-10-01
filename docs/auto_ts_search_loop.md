@@ -25,30 +25,40 @@ Case YAML is written by Chi. QRC is a printed suggestion only.
 Count Chi's manual actions per verified TS.
 
 - Baseline (estimate): 12 actions without QRC, 15 with QRC.
-- Pipeline (predicted): 6–7 (build guess, write case YAML once per case, run
-  TS queue, judge mode from the table, run IRC queue, run endpoint/QRC queue,
-  final OK).
-
-Pass 3 was to measure this on A (normal IRC) and C (QRC path) with real code.
-Those ts-scout logs were **not readable** from this environment
-(`AsterGemini/ts-scout` GitHub 404). The metric is not re-counted here.
+- Measured replay (pass 3, real logs): A is 6 manual touchpoints against a
+  baseline of 12, or 7–8 counting the case YAML. C is 7 against a baseline
+  of 15, or 8 counting the YAML.
+- Extra that the raw count leaves out: writing the case YAML is +1 per case;
+  each command is still typed by Chi; nothing chains `check` into the next
+  queue file. For A, a template product cutoff of < 1.5 Å false-flagged the
+  TS1b IRC end (C8–N29 = 1.574 Å, which is INT2). That cutoff is removed.
+  Until Chi sets thresholds, `check` prints `endpoint criteria unset` and
+  does not add a connectivity-mismatch touchpoint.
 
 ## ACCEPTANCE CRITERIA (from PASS 2 FINAL / user)
 
 1. `check` prints nimag, imag freq, charge/mult, top-8 pair projections with
-   distances, spec-bond ranks, Zmax (info only).
-2. nimag≠1 hard reject. Primary spec bond not #1 within 3.2 Å is a reject
-   `--force` can override; rank always printed. Else CANDIDATE: judge mode.
+   distances, spec-bond ranks, Zmax (info only). The table header notes
+   `projections from 2-decimal displacements`.
+2. The only hard TS rejects are nimag≠1 (every negative frequency counts;
+   `--force` does not override) and primary spec bond not #1 within 3.2 Å
+   (`--force` overrides; rank printed on that path). If every spec-bond
+   projection is about 0, the reject is `spec bonds not displaced in mode`
+   and does not quote a rank. A negative with |freq| < 15 cm⁻¹ prints
+   `small imag (<15): judge` and is still counted in nimag.
 3. Route and 0/1 charge/mult checked against the three expected MN15/def2svp
-   routes. Neg1-style routes are flagged.
-4. Endpoint-opt: nimag=0 and YAML endpoint bonds.
-5. `queue` writes, never submits, ts → irc fwd+rev batched → endpoint opt
-   batched. QRC is printed only: <5 IRC points → `suggest qrc ±` plus
-   commands (amp 0.5, existing qrc job). Minima but failed bonds →
-   `connectivity mismatch: judge`, no QRC.
+   routes. Neg1-style routes are flagged. Flags do not turn a CANDIDATE
+   into REJECT.
+4. Endpoint-opt: nimag≠0 prints `ENDPOINT NOT MIN` (not REJECT). Bond-criteria
+   failure prints `connectivity mismatch: judge` (not REJECT). While the YAML
+   placeholder is unset, `check` prints `endpoint criteria unset` and skips
+   the bond verdict.
+5. table printed to stdout
 6. No new job types. No MLIP code. No early-kill. No custom Gaussian
-   templates. Do not edit ts-scout `calc/chemsmart/zn5.yaml`.
-7. Tests: ts-scout logs if accessible, else chemsmart test data (and say so).
+   templates. Do not edit ts-scout `calc/chemsmart/zn5.yaml`. `queue` still
+   writes, never submits (see DESIGN). QRC is printed only.
+7. Tests: synthetic snippets plus the real Case 1 TS1b forward IRC log
+   (`tests/data/tscheck/TS1b_ircf.log`, 23 points, PES minimum).
 8. Draft PR, author AsterGemini only.
 
 ## Passes 1–2 (ts-scout; accepted)
@@ -71,13 +81,17 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 | Automated | Why it survived |
 | --- | --- |
 | Parse nimag / imag / charge/mult / top-8 / spec ranks / Zmax | Mechanical; Zmax is printed only |
-| Hard reject nimag≠1 | Robust on the benchmark set |
-| Reject primary bond not #1 within 3.2 Å (`--force` override) | Catches the rotor (Neg2); rank always printed |
+| Hard reject nimag≠1 (every negative counted) | Robust on the benchmark set |
+| Print `small imag (<15): judge` for \|freq\| < 15 cm⁻¹ | Not dropped silently; still counted |
+| Reject primary bond not #1 within 3.2 Å (`--force` override) | Rank printed on this path only |
+| Reject `spec bonds not displaced in mode` when every spec projection is ~0 | Neg2's tie-order rank is meaningless; no rank quoted |
 | Route and 0/1 charge/mult flag | Catches Neg1's old route without auto-rejecting |
-| Endpoint nimag=0 + YAML bond criteria | Survived pass 1–2 |
+| `ENDPOINT NOT MIN` when an endpoint opt has nimag≠0 | Judge state, not a hard reject |
+| `connectivity mismatch: judge` when set bond criteria fail | Judge state, not a hard reject |
+| `endpoint criteria unset` while the YAML placeholder is unset | Skips a false bond verdict |
 | Write (not submit) ts / irc / opt command files | File shuffling only |
-| Print QRC suggestion when IRC points < 5 | Diagnosis only; not queued |
-| Print connectivity mismatch, no QRC | Critic fix 1 |
+| Print QRC suggestion when IRC points < 5 | Diagnosis only; not queued. Point count is not a minimum |
+| `IRC did not reach a minimum` when ≥5 points and no PES-minimum string | Matches `PES minimum detected` and the older `minimum found` |
 
 ### What was deliberately left manual
 
@@ -95,19 +109,35 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 
 ## Benchmark in this environment
 
-`AsterGemini/ts-scout` was not readable (GitHub 404). No A/B/C/Neg1/Neg2 or
-Case 3 IRC logs on this box.
+Pass 3 ran on the real logs. Functional results:
 
-Tests use:
+- A TS1b −175.16, case1.yaml: CANDIDATE, C8–N29 #1, Zmax 0.1623 Zn21–N29.
+- B TS2 −170.46, case1_ts2.yaml: CANDIDATE, O1–C8 #1, Zmax 0.3338 C8–Zn21.
+- C case3 TS2 −84.61: CANDIDATE, C113–O114 #1, Zmax 0.2768 Zn5–C113.
+- Neg1 −219.14: CANDIDATE with ROUTE FLAG (old `#p … MN15/Def2SVP`).
+- Neg2 rotor −89.82: spec-bond projections are 0. The reject is
+  `spec bonds not displaced in mode` with no rank (a distance tie-break
+  previously printed rank 76).
+- TS1b forward IRC (`tests/data/tscheck/TS1b_ircf.log`): 23 points,
+  `PES minimum detected`. With case1 endpoints unset, `check` prints
+  `endpoint criteria unset`, no QRC, not REJECT. The old product cutoff
+  < 1.5 Å was wrong: the IRC end is C8–N29 = 1.574 Å and that geometry
+  is INT2.
+- Case 3 one-point IRC (also prints `PES minimum detected`): still
+  `suggest qrc ±` because the point count is under 5.
 
-- Synthetic Gaussian logs that reproduce the spec outcomes: A/B/C-like
-  CANDIDATE, Neg2-like REJECT (primary not #1), Neg1-like CANDIDATE with
-  ROUTE FLAG, one-point IRC → `suggest qrc ±`, long IRC with failed endpoint
-  bonds → `connectivity mismatch: judge` and no QRC.
-- Public chemsmart fixture `pd_genecp_ts.log`: nimag=1 CANDIDATE with a route
-  flag (not MN15/def2svp/maxstep=5); quiet-bond spec → REJECT.
+Measured manual touchpoints: A 6 vs baseline 12 (7–8 counting the YAML);
+C 7 vs baseline 15 (or 8).
 
-Pass-3 metric replay on A and C is **blocked** without ts-scout logs.
+Tests also use synthetic Gaussian snippets for the small-imaginary count,
+the stalled IRC (no minimum string), endpoint nimag≠0, and the public
+chemsmart fixture `pd_genecp_ts.log`.
+
+## Deliberate deletion
+
+`ts_auto.csv` (and a matching INGEST note) is **not** part of this MVP.
+That is a deliberate deletion, not an access limitation. The mode table is
+printed to stdout (acceptance criterion 5). Nothing writes a results CSV.
 
 ## Disagreements with the spec
 
@@ -115,9 +145,10 @@ None on intended behavior. Implementation notes:
 
 - Commands are top-level `chemsmart check` and `chemsmart queue`, not
   `chemsmart run …`, so `sub` cannot HPC-submit them.
-- ts-scout CSV `calc/results/ts_auto.csv` / INGEST.md lives in ts-scout and
-  was not edited (repo not readable; also out of this fork).
 - UMA is absent from the code, as required.
+- `queue` still writes a shell file and never submits: TS with
+  `--additional-opt-options maxstep=5`, one IRC command (forward and
+  reverse together), endpoint opts batched. QRC is never queued.
 
 ## Related work (from pass 1–2; not wrapped)
 

@@ -1,5 +1,7 @@
 """Tests for chemsmart check / queue (no new job types, no MLIP)."""
 
+import os
+
 import numpy as np
 import pytest
 import yaml
@@ -147,8 +149,17 @@ MODE_ROTOR = np.array(
     [
         [0.00, 0.00, 0.00],
         [0.00, 0.00, 0.00],
-        [0.00, 0.55, 0.00],
+        [0.00, 0.00, 0.00],
         [0.80, 0.20, 0.00],
+    ]
+)
+# C–O moves, but C–Zn moves more, so the primary bond is not #1.
+MODE_OFFRANK = np.array(
+    [
+        [0.20, 0.00, 0.00],
+        [-0.10, 0.00, 0.00],
+        [0.00, 0.80, 0.00],
+        [0.00, 0.00, 0.00],
     ]
 )
 
@@ -196,6 +207,32 @@ def rotor_log(tmp_path):
 
 
 @pytest.fixture()
+def offrank_log(tmp_path):
+    return write_log(
+        tmp_path / "offrank.log",
+        route="# opt=(ts,calcfc,noeigentest,maxstep=5) freq MN15 def2svp",
+        symbols=SYMBOLS,
+        numbers=NUMBERS,
+        positions=POS,
+        freqs=[-120.0, 20.0, 30.0],
+        modes=[MODE_OFFRANK],
+    )
+
+
+@pytest.fixture()
+def small_imag_log(tmp_path):
+    return write_log(
+        tmp_path / "small.log",
+        route="# opt=(ts,calcfc,noeigentest,maxstep=5) freq MN15 def2svp",
+        symbols=SYMBOLS,
+        numbers=NUMBERS,
+        positions=POS,
+        freqs=[-175.16, -8.2, 30.0],
+        modes=[MODE_TS, np.zeros((4, 3))],
+    )
+
+
+@pytest.fixture()
 def opt_log(tmp_path):
     return write_log(
         tmp_path / "opt.log",
@@ -228,7 +265,10 @@ def irc_one_point(tmp_path):
         positions=POS,
         freqs=None,
         modes=None,
-        extra="Point Number 1 in 1st direction.\n",
+        extra=(
+            "Point Number 1 in 1st direction.\n"
+            "PES minimum detected on this side of the pathway.\n"
+        ),
     )
 
 
@@ -291,6 +331,7 @@ class TestCheckTS:
         assert report.zmax is not None
         text = report.text()
         assert "CANDIDATE: judge mode" in text
+        assert "projections from 2-decimal displacements" in text
         assert "Zmax" in text
         assert "information only" in text
 
@@ -301,18 +342,34 @@ class TestCheckTS:
         assert report.route_flag is True
         assert "ROUTE FLAG" in report.text()
 
-    def test_neg2_primary_not_first_rejects(self, rotor_log, case_yaml):
+    def test_neg2_undisplaced_spec_bonds_no_rank(self, rotor_log, case_yaml):
         spec = load_case_spec(case_yaml)
         report = check_ts_log(rotor_log, spec)
+        text = report.text()
         assert report.verdict == "REJECT"
-        assert report.primary_rank_32 != 1
-        assert "Primary spec bond not #1" in report.text()
+        assert "spec bonds not displaced in mode" in text
+        assert "rank" not in text.lower()
+        assert "Primary spec bond not #1" not in text
 
-    def test_force_overrides_primary_rank(self, rotor_log, case_yaml):
+    def test_force_overrides_primary_rank(self, offrank_log, case_yaml):
         spec = load_case_spec(case_yaml)
-        report = check_ts_log(rotor_log, spec, force=True)
+        rejected = check_ts_log(offrank_log, spec)
+        assert rejected.verdict == "REJECT"
+        assert "Primary spec bond not #1" in rejected.text()
+        assert rejected.primary_rank_32 != 1
+        report = check_ts_log(offrank_log, spec, force=True)
         assert report.verdict == "CANDIDATE: judge mode"
         assert report.force_used is True
+
+    def test_small_imag_is_counted_and_printed(
+        self, small_imag_log, case_yaml
+    ):
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(small_imag_log, spec)
+        assert report.nimag == 2
+        assert report.verdict == "REJECT"
+        assert "small imag (<15): judge" in report.text()
+        assert "-8.2000" in report.text()
 
     def test_nimag_zero_hard_reject(self, opt_log, case_yaml):
         spec = load_case_spec(case_yaml)
@@ -350,8 +407,10 @@ class TestCheckOptAndIRC:
         report = check_ts_log(irc_long, spec)
         assert report.irc_points >= 5
         assert report.qrc_suggestion is None
+        assert report.verdict == "connectivity mismatch: judge"
         assert "connectivity mismatch: judge" in report.text()
         assert "suggest no QRC" in report.text()
+        assert "REJECT" not in report.text()
 
 
 class TestCLI:
@@ -368,6 +427,96 @@ class TestCLI:
         )
         assert result.exit_code == 0, result.output
         assert "CANDIDATE: judge mode" in result.output
+
+    def test_opt_nimag_is_not_a_hard_reject(self, ts_log, case_yaml):
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(ts_log, spec, kind="opt")
+        assert report.nimag == 1
+        assert report.verdict == "ENDPOINT NOT MIN"
+        assert "REJECT" not in report.text()
+
+    def test_opt_bond_fail_is_judge(self, tmp_path, case_yaml):
+        path = write_log(
+            tmp_path / "opt_far.log",
+            route="# opt freq MN15 def2svp",
+            symbols=SYMBOLS,
+            numbers=NUMBERS,
+            positions=np.array(
+                [
+                    [0.00, 0.00, 0.00],
+                    [1.90, 0.00, 0.00],
+                    [0.00, 2.00, 0.00],
+                    [0.00, 0.00, 1.00],
+                ]
+            ),
+            freqs=[20.0, 30.0, 40.0],
+            modes=[np.zeros((4, 3))],
+        )
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(path, spec, kind="opt")
+        assert report.verdict == "connectivity mismatch: judge"
+        assert "REJECT" not in report.text()
+
+    def test_unset_endpoints_skip_bond_verdict(self, opt_log, tmp_path):
+        spec_path = tmp_path / "unset.yaml"
+        spec_path.write_text(
+            "name: unset\ncharge: 0\nmultiplicity: 1\n"
+            "primary_bond: [1, 2]\nbonds:\n  - [1, 2]\nendpoints: unset\n",
+            encoding="utf-8",
+        )
+        spec = load_case_spec(str(spec_path))
+        assert spec["endpoints_set"] is False
+        report = check_ts_log(opt_log, spec, kind="opt")
+        assert "endpoint criteria unset" in report.text()
+        assert "connectivity mismatch" not in report.text()
+        assert report.verdict != "REJECT"
+
+    def test_stalled_irc_is_not_a_minimum(self, tmp_path, case_yaml):
+        extra = "\n".join(
+            f"Point Number {i} in 1st direction." for i in range(1, 9)
+        )
+        path = write_log(
+            tmp_path / "stalled.log",
+            route=(
+                "# MN15 def2svp irc(calcfc,recalc=6,forward,"
+                "maxpoints=512,maxcycle=128)"
+            ),
+            symbols=SYMBOLS,
+            numbers=NUMBERS,
+            positions=POS,
+            freqs=None,
+            modes=None,
+            extra=extra + "\n",
+        )
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(path, spec)
+        assert report.irc_points >= 5
+        assert "IRC did not reach a minimum" in report.text()
+        assert "connectivity mismatch" not in report.text()
+        assert report.qrc_suggestion is None
+
+    def test_ts1b_ircf_reaches_minimum(self):
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        logfile = os.path.join(
+            root, "tests", "data", "tscheck", "TS1b_ircf.log"
+        )
+        spec_path = os.path.join(
+            root,
+            "chemsmart",
+            "settings",
+            "templates",
+            "tscheck",
+            "case1.yaml",
+        )
+        spec = load_case_spec(spec_path)
+        report = check_ts_log(logfile, spec)
+        text = report.text()
+        assert report.irc_points == 23
+        assert report.qrc_suggestion is None
+        assert "endpoint criteria unset" in text
+        assert "connectivity mismatch" not in text
+        assert "suggest qrc" not in text
+        assert report.verdict != "REJECT"
 
     def test_check_cli_reject_exit(self, rotor_log, case_yaml):
         result = CliRunner().invoke(

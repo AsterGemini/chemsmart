@@ -46,9 +46,12 @@ def check(log, spec, force, kind, project, ts_file):
     Prints nimag, imaginary frequency, charge/mult, the top-8 pair
     projections, spec-bond ranks, and Zmax (information only).
 
-    Hard reject: nimag≠1. Reject (overridable with --force): primary
-    spec bond not #1 within 3.2 Å. Everything else is
-    'CANDIDATE: judge mode'. Does not submit jobs.
+    Hard TS reject: nimag≠1. Reject that --force can override: primary
+    spec bond not #1 within 3.2 Å. Spec bonds with ~0 projection reject
+    as 'spec bonds not displaced in mode' (no rank). Endpoint nimag≠0
+    is 'ENDPOINT NOT MIN'. Failed endpoint bonds are
+    'connectivity mismatch: judge'. Unset YAML criteria print
+    'endpoint criteria unset'. Does not submit jobs.
 
     Examples:
 

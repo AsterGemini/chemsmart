@@ -22,6 +22,11 @@ CUTOFF_PRIMARY = 3.2
 CUTOFF_ZMAX = 3.6
 IRC_QRC_MIN_POINTS = 5
 QRC_AMP = 0.5
+# Gaussian prints Cartesian displacements to 2 decimals, so |proj| below
+# this is noise. Spec bonds at or under it are "not displaced".
+SPEC_PROJ_ZERO = 0.03
+SMALL_IMAG_CM = 15.0
+UNSET_ENDPOINT = {"unset", "placeholder"}
 
 EXPECTED_CHARGE = 0
 EXPECTED_MULTIPLICITY = 1
@@ -145,7 +150,7 @@ def load_case_spec(path):
         primary = bonds[0]
     elif primary is not None:
         primary = parse_atom_pair(primary)
-    endpoints = data.get("endpoints") or {}
+    endpoints, endpoints_set = _parse_endpoints(data.get("endpoints"))
     return {
         "name": data.get("name"),
         "charge": data.get("charge", EXPECTED_CHARGE),
@@ -153,9 +158,28 @@ def load_case_spec(path):
         "primary_bond": primary,
         "bonds": bonds,
         "endpoints": endpoints,
+        "endpoints_set": endpoints_set,
         "project": data.get("project", "zn5"),
         "raw": data,
     }
+
+
+def _parse_endpoints(raw):
+    """Return (criteria, is_set). ``unset`` skips the bond verdict."""
+    if raw is None:
+        return {}, False
+    if isinstance(raw, str):
+        if raw.strip().lower() in UNSET_ENDPOINT:
+            return {}, False
+        raise ValueError(
+            "endpoints must be a mapping or the placeholder 'unset'"
+        )
+    if not isinstance(raw, dict) or not raw:
+        return {}, False
+    status = str(raw.get("status", "")).strip().lower()
+    if status in UNSET_ENDPOINT:
+        return {}, False
+    return raw, True
 
 
 def _eval_bond_criterion(positions, atoms, op, value):
@@ -221,14 +245,20 @@ def last_freq_block(output):
     return freqs[:n], usable[:n]
 
 
-def count_imaginary(freqs, ignore_threshold=-15.0):
-    imag = [freq for freq in freqs if freq < ignore_threshold]
+def count_imaginary(freqs):
+    """Count every negative frequency. Nothing is dropped."""
+    imag = [freq for freq in freqs if freq < 0.0]
     return len(imag), imag
 
 
-def first_imaginary_mode(freqs, modes, ignore_threshold=-15.0):
+def small_imaginary(imag):
+    """Negatives with |freq| < 15 cm^-1. Printed, not ignored."""
+    return [freq for freq in imag if abs(freq) < SMALL_IMAG_CM]
+
+
+def first_imaginary_mode(freqs, modes):
     for freq, mode in zip(freqs, modes):
-        if freq < ignore_threshold:
+        if freq < 0.0:
             return freq, mode
     return None, None
 
@@ -298,9 +328,14 @@ def irc_point_count(filename, output=None):
 
 
 def irc_reached_minimum(filename):
+    """True only when Gaussian reports a PES minimum.
+
+    Real logs print ``PES minimum detected``. Older notes used
+    ``minimum found``. Point count alone is not a minimum.
+    """
     with open(filename, encoding="utf-8", errors="replace") as handle:
-        text = handle.read()
-    return "minimum found" in text.lower()
+        text = handle.read().lower()
+    return "pes minimum detected" in text or "minimum found" in text
 
 
 def qrc_commands(project, ts_file, charge, multiplicity, label=None):
@@ -343,7 +378,10 @@ class CheckReport:
 
 
 def _append_table(lines, rows, n=8):
-    lines.append("top-8 heavy-atom pair projections (no cutoff):")
+    lines.append(
+        "top-8 heavy-atom pair projections (no cutoff); "
+        "projections from 2-decimal displacements:"
+    )
     lines.append(f"{'#':>3}  {'pair':<16} {'r/A':>8} {'proj':>10}")
     for row in rows[:n]:
         lines.append(
@@ -374,6 +412,7 @@ def check_ts_log(
     nimag, imag = count_imaginary(freqs)
     imag_freq = imag[0] if imag else None
     freq, mode = first_imaginary_mode(freqs, modes)
+    small = small_imaginary(imag)
 
     report = CheckReport(
         kind=kind,
@@ -389,6 +428,10 @@ def check_ts_log(
     lines.append(f"nimag: {nimag}")
     if imag_freq is not None:
         lines.append(f"imaginary frequency: {imag_freq:.4f} cm^-1")
+    if small:
+        lines.append("small imag (<15): judge")
+        for freq_small in small:
+            lines.append(f"  {freq_small:.4f} cm^-1")
     lines.append(f"charge/mult: {charge} {multiplicity}")
 
     route_info = check_route(kind, route)
@@ -468,14 +511,29 @@ def check_ts_log(
                 return row
         return None
 
-    lines.append("spec-bond ranks:")
+    hits = []
     for pair in spec_bonds:
         all_hit = _rank_of(pair, all_rows)
-        cut_hit = _rank_of(pair, rows_32)
-        label = pair_label(symbols, pair[0], pair[1])
         if all_hit is None:
+            label = pair_label(symbols, pair[0], pair[1])
             lines.append(f"  {label}: not a heavy-atom pair")
             continue
+        cut_hit = _rank_of(pair, rows_32)
+        hits.append((pair, all_hit, cut_hit))
+
+    undisplaced = bool(hits) and all(
+        abs(all_hit["proj"]) < SPEC_PROJ_ZERO for _, all_hit, _ in hits
+    )
+    if undisplaced:
+        report.verdict = "REJECT"
+        report.reasons.append("spec bonds not displaced in mode")
+        lines.append("spec bonds not displaced in mode")
+        lines.append(f"verdict: {report.verdict}")
+        return report
+
+    lines.append("spec-bond ranks:")
+    for pair, all_hit, cut_hit in hits:
+        label = pair_label(symbols, pair[0], pair[1])
         rank_32 = cut_hit["rank"] if cut_hit else None
         report.spec_bonds.append(
             {
@@ -531,10 +589,15 @@ def check_ts_log(
 def _fill_opt(report, spec, symbols, positions, nimag):
     lines = report.lines
     if nimag != 0:
-        report.verdict = "REJECT"
-        report.reasons.append(f"endpoint opt requires nimag=0 (found {nimag})")
+        report.verdict = "ENDPOINT NOT MIN"
+        report.reasons.append(f"ENDPOINT NOT MIN (nimag={nimag})")
+        lines.append("ENDPOINT NOT MIN")
         lines.append(f"verdict: {report.verdict}")
-        lines.append(report.reasons[-1])
+        return report
+    if not spec.get("endpoints_set"):
+        report.verdict = "CANDIDATE: judge mode"
+        lines.append("endpoint criteria unset")
+        lines.append(f"verdict: {report.verdict}")
         return report
     endpoints, matched = evaluate_endpoints(spec, positions, symbols)
     report.endpoints = endpoints
@@ -547,17 +610,14 @@ def _fill_opt(report, spec, symbols, positions, nimag):
                 f"(r={rule['distance']:.3f} Å) "
                 f"{'ok' if rule['passed'] else 'no'}"
             )
-    if not endpoints:
-        lines.append("no endpoint bond criteria in spec YAML")
-        report.verdict = "CANDIDATE: judge mode"
-    elif matched:
+    if matched:
         report.verdict = "CANDIDATE: judge mode"
         lines.append(f"matched endpoints: {', '.join(matched)}")
     else:
-        report.verdict = "REJECT"
-        report.reasons.append("YAML endpoint bond criteria not met")
+        report.verdict = "connectivity mismatch: judge"
+        report.reasons.append("connectivity mismatch: judge")
+        lines.append("connectivity mismatch: judge")
         lines.append(f"verdict: {report.verdict}")
-        lines.append(report.reasons[-1])
         return report
     lines.append(f"verdict: {report.verdict}")
     return report
@@ -580,18 +640,7 @@ def _fill_irc(
     npoints = irc_point_count(filename, output=output)
     report.irc_points = npoints
     lines.append(f"IRC points: {npoints}")
-    endpoints, matched = evaluate_endpoints(spec, positions, symbols)
-    report.endpoints = endpoints
-    for item in endpoints:
-        status = "PASS" if item["passed"] else "FAIL"
-        lines.append(f"IRC end vs {item['name']}: {status}")
-        for rule in item["criteria"]:
-            lines.append(
-                f"  {rule['label']} {rule['op']} {rule['value']} "
-                f"(r={rule['distance']:.3f} Å)"
-            )
-
-    reached = npoints >= IRC_QRC_MIN_POINTS or irc_reached_minimum(filename)
+    reached = irc_reached_minimum(filename)
     ts_for_qrc = ts_file or filename
     if npoints < IRC_QRC_MIN_POINTS:
         report.qrc_suggestion = "suggest qrc ±"
@@ -605,14 +654,42 @@ def _fill_irc(
             "QRC is a printed suggestion only; not written to a queue "
             "file and not submitted."
         )
-    elif reached and endpoints and not matched:
-        report.qrc_suggestion = None
+        lines.append(f"verdict: {report.verdict}")
+        return report
+
+    if not reached:
         report.verdict = "CANDIDATE: judge mode"
+        report.reasons.append("IRC did not reach a minimum")
+        lines.append("IRC did not reach a minimum")
+        lines.append(f"verdict: {report.verdict}")
+        return report
+
+    if not spec.get("endpoints_set"):
+        report.verdict = "CANDIDATE: judge mode"
+        lines.append("endpoint criteria unset")
+        lines.append("no QRC suggestion")
+        lines.append(f"verdict: {report.verdict}")
+        return report
+
+    endpoints, matched = evaluate_endpoints(spec, positions, symbols)
+    report.endpoints = endpoints
+    for item in endpoints:
+        status = "PASS" if item["passed"] else "FAIL"
+        lines.append(f"IRC end vs {item['name']}: {status}")
+        for rule in item["criteria"]:
+            lines.append(
+                f"  {rule['label']} {rule['op']} {rule['value']} "
+                f"(r={rule['distance']:.3f} Å)"
+            )
+    if not matched:
+        report.qrc_suggestion = None
+        report.verdict = "connectivity mismatch: judge"
         report.reasons.append("connectivity mismatch: judge")
         lines.append("connectivity mismatch: judge")
         lines.append("suggest no QRC")
     else:
         report.verdict = "CANDIDATE: judge mode"
+        lines.append(f"matched endpoints: {', '.join(matched)}")
         lines.append("no QRC suggestion")
     lines.append(f"verdict: {report.verdict}")
     return report
