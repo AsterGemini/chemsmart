@@ -1,0 +1,27 @@
+# Case 1 TS1 (ε-caprolactone ROP, C8–N29 forming).
+# Written by the user. Atom numbers match ts-scout pathways/case1/TS1b.log.
+# Chi edits distances if the endpoints change.
+#
+# For Case 1 TS2 (O1–C8), use primary_bond: [1, 8] instead.
+name: case1_ts1
+project: zn5
+charge: 0
+multiplicity: 1
+primary_bond: [8, 29]  # C8–N29
+bonds:
+  - [8, 29]    # C8–N29
+  - [21, 2]    # Zn21–O2
+  - [21, 29]   # Zn21–N29
+  - [21, 1]    # Zn21–O1
+  - [1, 8]     # O1–C8
+endpoints:
+  INT:
+    bonds:
+      - atoms: [8, 29]
+        op: ">"
+        value: 2.3
+  product:
+    bonds:
+      - atoms: [8, 29]
+        op: "<"
+        value: 1.5

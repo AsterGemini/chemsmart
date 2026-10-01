@@ -11,7 +11,9 @@ import click
 from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
+from .check import check
 from .config import config
+from .queue import queue
 from .run import run
 from .sub import sub
 from .update import update
@@ -69,6 +71,8 @@ entry_point.add_command(run)
 entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
+entry_point.add_command(check)
+entry_point.add_command(queue)
 
 
 def main():  # pragma: no cover

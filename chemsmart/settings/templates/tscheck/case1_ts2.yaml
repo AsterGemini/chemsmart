@@ -1,0 +1,22 @@
+# Case 1 TS2 (O1–C8). Same molecule numbering as case1.yaml / TS1b.
+name: case1_ts2
+project: zn5
+charge: 0
+multiplicity: 1
+primary_bond: [1, 8]  # O1–C8
+bonds:
+  - [1, 8]
+  - [21, 1]
+  - [8, 29]
+  - [21, 2]
+endpoints:
+  INT:
+    bonds:
+      - atoms: [1, 8]
+        op: ">"
+        value: 2.3
+  product:
+    bonds:
+      - atoms: [1, 8]
+        op: "<"
+        value: 1.5
