@@ -405,6 +405,9 @@ class TestCheckOptAndIRC:
         assert any(
             e["name"] == "INT2" and e["passed"] for e in report.endpoints
         )
+        text = report.text()
+        assert "C1–O2: 1.200 Å, needs > 2.3 Å (product)" in text
+        assert "connectivity mismatch" not in text
 
     def test_irc_one_point_suggests_qrc(self, irc_one_point, case_yaml):
         spec = load_case_spec(case_yaml)
@@ -425,9 +428,12 @@ class TestCheckOptAndIRC:
         assert report.irc_points >= 5
         assert report.qrc_suggestion is None
         assert report.verdict == "connectivity mismatch: judge"
-        assert "connectivity mismatch: judge" in report.text()
-        assert "suggest no QRC" in report.text()
-        assert "REJECT" not in report.text()
+        text = report.text()
+        assert "connectivity mismatch: judge" in text
+        assert "C1–O2: 1.900 Å, needs < 1.5 Å (INT2)" in text
+        assert "C1–O2: 1.900 Å, needs > 2.3 Å (product)" in text
+        assert "suggest no QRC" in text
+        assert "REJECT" not in text
 
 
 class TestCLI:
@@ -471,8 +477,12 @@ class TestCLI:
         )
         spec = load_case_spec(case_yaml)
         report = check_ts_log(path, spec, kind="opt")
+        text = report.text()
         assert report.verdict == "connectivity mismatch: judge"
-        assert "REJECT" not in report.text()
+        assert "REJECT" not in text
+        assert "C1–O2: 1.900 Å, needs < 1.5 Å (INT2)" in text
+        assert "C1–O2: 1.900 Å, needs > 2.3 Å (product)" in text
+        assert "connectivity mismatch: judge" in text
 
     def test_unset_endpoints_skip_bond_verdict(self, opt_log, tmp_path):
         spec_path = tmp_path / "unset.yaml"
@@ -512,10 +522,10 @@ class TestCLI:
         assert "connectivity mismatch" not in report.text()
         assert report.qrc_suggestion is None
 
-    def test_ts1b_ircf_reaches_minimum(self):
+    def test_synthetic_irc_reaches_minimum(self):
         root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         logfile = os.path.join(
-            root, "tests", "data", "tscheck", "TS1b_ircf.log"
+            root, "tests", "data", "tscheck", "synthetic_irc_minimum.log"
         )
         spec_path = os.path.join(
             root,
@@ -528,7 +538,7 @@ class TestCLI:
         spec = load_case_spec(spec_path)
         report = check_ts_log(logfile, spec)
         text = report.text()
-        assert report.irc_points == 23
+        assert report.irc_points == 6
         assert report.qrc_suggestion is None
         assert "endpoint criteria unset" in text
         assert "connectivity mismatch" not in text

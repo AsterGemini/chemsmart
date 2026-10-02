@@ -25,7 +25,7 @@ Case YAML is written by Chi. QRC is a printed suggestion only.
 Count Chi's manual actions per verified TS.
 
 - Baseline (estimate): 12 actions without QRC, 15 with QRC.
-- Measured replay (pass 3, real logs): A is 6 manual touchpoints against a
+- Measured replay (pass 3; those logs are not in this repository): A is 6 manual touchpoints against a
   baseline of 12, or 7–8 counting the case YAML. C is 7 against a baseline
   of 15, or 8 counting the YAML.
 - Extra that the raw count leaves out: writing the case YAML is +1 per case;
@@ -51,15 +51,18 @@ Count Chi's manual actions per verified TS.
    routes. Neg1-style routes are flagged. Flags do not turn a CANDIDATE
    into REJECT.
 4. Endpoint-opt: nimag≠0 prints `ENDPOINT NOT MIN` (not REJECT). Bond-criteria
-   failure prints `connectivity mismatch: judge` (not REJECT). While the YAML
-   placeholder is unset, `check` prints `endpoint criteria unset` and skips
-   the bond verdict.
+   failure prints `connectivity mismatch: judge` (not REJECT) and one line
+   per failing bond (`C8–N29: 1.574 Å, needs < 1.5 Å (product)`). While the
+   YAML placeholder is unset, `check` prints `endpoint criteria unset` and
+   skips the bond verdict. Case 1 thresholds stay unset.
 5. table printed to stdout
 6. No new job types. No MLIP code. No early-kill. No custom Gaussian
    templates. Do not edit ts-scout `calc/chemsmart/zn5.yaml`. `queue` still
    writes, never submits (see DESIGN). QRC is printed only.
-7. Tests: synthetic snippets plus the real Case 1 TS1b forward IRC log
-   (`tests/data/tscheck/TS1b_ircf.log`, 23 points, PES minimum).
+7. Tests: synthetic Gaussian snippets, including
+   `tests/data/tscheck/synthetic_irc_minimum.log` (invented points and a
+   PES-minimum line), plus the public chemsmart fixture
+   `pd_genecp_ts.log`. No research logs are committed.
 8. Draft PR, author AsterGemini only.
 
 ## Passes 1–2 (ts-scout; accepted)
@@ -88,7 +91,7 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 | Reject `spec bonds not displaced in mode` when every spec projection is ~0 (`--force` override) | No meaningful rank; override does not quote one |
 | Route and 0/1 charge/mult flag | Catches Neg1's old route without auto-rejecting |
 | `ENDPOINT NOT MIN` when an endpoint opt has nimag≠0 | Judge state, not a hard reject |
-| `connectivity mismatch: judge` when set bond criteria fail | Judge state, not a hard reject |
+| `connectivity mismatch: judge` plus one line per failing bond | Judge state, not a hard reject |
 | `endpoint criteria unset` while the YAML placeholder is unset | Skips a false bond verdict |
 | Write (not submit) ts / irc / opt command files | File shuffling only |
 | Print QRC suggestion when IRC points < 5 | Diagnosis only; not queued. Point count is not a minimum |
@@ -110,7 +113,8 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 
 ## Benchmark in this environment
 
-Pass 3 ran on the real logs. Functional results:
+Pass 3 was measured on logs that are not in this repository. Functional
+results:
 
 - A TS1b −175.16, case1.yaml: CANDIDATE, C8–N29 #1, Zmax 0.1623 Zn21–N29.
 - B TS2 −170.46, case1_ts2.yaml: CANDIDATE, O1–C8 #1, Zmax 0.3338 C8–Zn21.
@@ -119,20 +123,23 @@ Pass 3 ran on the real logs. Functional results:
 - Neg2 rotor −89.82: spec-bond projections are 0. The reject is
   `spec bonds not displaced in mode` with no rank (a distance tie-break
   previously printed rank 76).
-- TS1b forward IRC (`tests/data/tscheck/TS1b_ircf.log`): 23 points,
-  `PES minimum detected`. With case1 endpoints unset, `check` prints
-  `endpoint criteria unset`, no QRC, not REJECT. The old product cutoff
-  < 1.5 Å was wrong: the IRC end is C8–N29 = 1.574 Å and that geometry
-  is INT2.
+- TS1b forward IRC (not committed): 23 points and `PES minimum
+  detected`. With case1 endpoints unset, `check` prints `endpoint
+  criteria unset`, no QRC, not REJECT. The old product cutoff < 1.5 Å
+  was wrong: the IRC end is C8–N29 = 1.574 Å and that geometry is INT2.
+  The file in this repo, `tests/data/tscheck/synthetic_irc_minimum.log`,
+  is an invented fixture, not that log.
 - Case 3 one-point IRC (also prints `PES minimum detected`): still
   `suggest qrc ±` because the point count is under 5.
 
 Measured manual touchpoints: A 6 vs baseline 12 (7–8 counting the YAML);
 C 7 vs baseline 15 (or 8).
 
-Tests also use synthetic Gaussian snippets for the small-imaginary count,
-the stalled IRC (no minimum string), endpoint nimag≠0, and the public
-chemsmart fixture `pd_genecp_ts.log`.
+Tests use synthetic Gaussian snippets for the small-imaginary count,
+the stalled IRC (no minimum string), endpoint nimag≠0, and a short
+invented IRC (`tests/data/tscheck/synthetic_irc_minimum.log`) that
+reaches a PES minimum. The public chemsmart fixture `pd_genecp_ts.log`
+is also used. No research logs are committed.
 
 ## Deliberate deletion
 

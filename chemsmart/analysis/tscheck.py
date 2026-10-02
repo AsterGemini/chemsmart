@@ -599,6 +599,19 @@ def check_ts_log(
     return report
 
 
+def _append_failed_bonds(lines, endpoints):
+    """One line per bond that fails a set endpoint criterion."""
+    for item in endpoints:
+        for rule in item["criteria"]:
+            if rule["passed"]:
+                continue
+            label = rule["label"].replace("-", "–", 1)
+            lines.append(
+                f"{label}: {rule['distance']:.3f} Å, "
+                f"needs {rule['op']} {rule['value']:g} Å ({item['name']})"
+            )
+
+
 def _fill_opt(report, spec, symbols, positions, nimag):
     lines = report.lines
     if nimag != 0:
@@ -623,6 +636,7 @@ def _fill_opt(report, spec, symbols, positions, nimag):
                 f"(r={rule['distance']:.3f} Å) "
                 f"{'ok' if rule['passed'] else 'no'}"
             )
+    _append_failed_bonds(lines, endpoints)
     if matched:
         report.verdict = "CANDIDATE: judge mode"
         lines.append(f"matched endpoints: {', '.join(matched)}")
@@ -694,6 +708,7 @@ def _fill_irc(
                 f"  {rule['label']} {rule['op']} {rule['value']} "
                 f"(r={rule['distance']:.3f} Å)"
             )
+    _append_failed_bonds(lines, endpoints)
     if not matched:
         report.qrc_suggestion = None
         report.verdict = "connectivity mismatch: judge"

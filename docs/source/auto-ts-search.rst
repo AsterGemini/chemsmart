@@ -47,9 +47,12 @@ Judge states (exit 0, not REJECT)
 =================================
 
 -  Endpoint opt with nimag≠0: ``ENDPOINT NOT MIN``.
--  Endpoint or IRC end fails YAML bond criteria: ``connectivity mismatch: judge``. An IRC that reached a minimum and
-   fails the bonds also prints ``suggest no QRC``.
--  Endpoints placeholder unset: ``endpoint criteria unset``. The bond verdict is skipped.
+
+-  Endpoint or IRC end fails YAML bond criteria: ``connectivity mismatch: judge``. Each failing bond is also one line:
+   atom pair, measured distance, required condition, and endpoint name, for example ``C8–N29: 1.574 Å, needs < 1.5 Å
+   (product)``. An IRC that reached a minimum and fails the bonds also prints ``suggest no QRC``.
+
+-  Endpoints placeholder unset: ``endpoint criteria unset``. The bond verdict is skipped. Case 1 thresholds stay unset.
 
 A route or charge/mult mismatch is a flag, not a reject. Everything that is not a hard reject and not one of the judge
 phrases above is ``CANDIDATE: judge mode``.
@@ -77,8 +80,8 @@ points suggests QRC even when a minimum string is present.
 -  At least 5 points and no minimum string: ``IRC did not reach a minimum``. No connectivity check and no QRC
    suggestion.
 -  Minimum reached and endpoint criteria unset: ``endpoint criteria unset``.
--  Minimum reached but the end geometry fails set YAML bond criteria: ``connectivity mismatch: judge`` and suggest no
-   QRC.
+-  Minimum reached but the end geometry fails set YAML bond criteria: ``connectivity mismatch: judge``, one line per
+   failing bond, and suggest no QRC.
 
 Endpoint-opt logs: nimag≠0 prints ``ENDPOINT NOT MIN``. nimag=0 checks the YAML bonds only when the criteria are set.
 
