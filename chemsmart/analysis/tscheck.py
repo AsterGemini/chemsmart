@@ -182,10 +182,18 @@ def _parse_scan(raw, primary):
         bond = parse_atom_pair(bond)
     target = raw.get("to")
     points = raw.get("points", 12)
+    if target is None or (
+        isinstance(target, str)
+        and target.strip().lower() in UNSET_ENDPOINT | {""}
+    ):
+        # Placeholder. ``guess`` refuses to scan until Chi sets a number.
+        parsed_to = None
+    else:
+        parsed_to = float(target)
     return {
         "bond": bond,
         "from": raw.get("from", "auto"),
-        "to": None if target is None else float(target),
+        "to": parsed_to,
         "points": int(points),
     }
 

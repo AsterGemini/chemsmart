@@ -17,10 +17,13 @@ bonds:
   - [21, 1]    # Zn21–O1
   - [1, 8]     # O1–C8
 endpoints: unset
-# `chemsmart guess` drives this primary bond. Chi sets `to`.
-# Forming example from the guess spec (~1.5 Å), not a fitted distance.
+# Scoring only. Not a second driven coordinate.
+contacts:
+  - [19, 27]   # Zn19–N27
+# `chemsmart guess` drives the primary bond only. Chi must set
+# scan.to (product-side distance in Å). There is no default.
 scan:
   bond: [8, 29]
   from: auto
-  to: 1.5
+  to: unset
   points: 12

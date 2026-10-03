@@ -1,23 +1,33 @@
 """1D constrained scan that proposes a TS guess.
 
-The scan drives the primary spec bond from the reactant distance to
-``scan.to`` in the case YAML, relaxes every other degree of freedom,
-and keeps the energy profile. An energy maximum on the first or last
-frame is ``FAIL (max at scan edge)`` and writes no guess. Otherwise
-the maximum frame is the guess. ``--sella`` optionally refines that
-frame (order 1, step cap). The mode table imports the tscheck
-projection helpers. Nothing here submits Gaussian.
+Experimental. The pass-2 xTB plumbing gate did not beat hand-built
+guesses. The scan drives the primary spec bond from the reactant
+distance to ``scan.to`` (Chi sets that number; there is no default),
+relaxes every other degree of freedom, and keeps the energy profile.
+The maximum is taken only from frames that converged. An energy
+maximum on the first or last of those frames is ``FAIL (max at scan
+edge)``. A failed run still writes ``scan.xyz``, the profile, and the
+result table, and does not write ``guess.xyz``. ``--sella`` is
+opt-in and report-only: it writes ``guess_sella.xyz`` and does not
+replace ``guess.xyz`` or rerun the scan. The mode table imports the
+tscheck projection helpers and is run only on a converged frame, after
+translation and rotation are projected out. Nothing here submits
+Gaussian.
 
 Climbing-image NEB is a later fallback (``neb_fallback``). It is not
 built. autodE, pysisyphus, and React-OT are cited in the docs and are
 not vendored.
 """
 
+import hashlib
+import json
+import logging
 import os
+import sys
 
 import numpy as np
 
-from chemsmart.analysis.calculators import CalculatorError
+from chemsmart.analysis.calculators import CalculatorError, scrub_secret
 from chemsmart.analysis.tscheck import (
     CUTOFF_PRIMARY,
     CUTOFF_ZMAX,
@@ -152,8 +162,8 @@ def _scan_setup(spec, points_override):
         )
     if scan.get("to") is None:
         raise ValueError(
-            "case YAML needs scan.to, the product-side distance in Å "
-            "(for example forming ~1.5 or breaking ~2.4)."
+            "Chi must set scan.to; there is no default. "
+            "scan.to is the product-side distance in Å for this case."
         )
     if points_override is None:
         count = int(scan.get("points") or 12)
@@ -281,20 +291,88 @@ def _signed_frequencies(freqs):
     return np.asarray(signed, dtype=float)
 
 
-def lowest_mode(atoms):
-    """Lowest Hessian mode as a unit Cartesian displacement, plus cm⁻¹."""
+def _diagonalize_hessian(atoms, hessian):
     from ase.vibrations import VibrationsData
 
-    hessian = cartesian_hessian(atoms)
     data = VibrationsData.from_2d(atoms, hessian)
     signed = _signed_frequencies(data.get_frequencies())
     modes = np.real(np.asarray(data.get_modes(), dtype=complex))
+    return signed, modes
+
+
+def _tr_basis(atoms, tol=1e-8):
+    """Mass-weighted translation and rotation vectors. Linear drops one."""
+    masses = np.asarray(atoms.get_masses(), dtype=float)
+    sqrt_m = np.sqrt(masses)
+    natoms = len(atoms)
+    dim = 3 * natoms
+    com = np.asarray(atoms.get_center_of_mass(), dtype=float)
+    pos = np.asarray(atoms.positions, dtype=float) - com
+    raw = []
+    for axis in range(3):
+        vec = np.zeros(dim)
+        vec[axis::3] = sqrt_m
+        raw.append(vec)
+    for axis in range(3):
+        unit = np.zeros(3)
+        unit[axis] = 1.0
+        vec = np.zeros(dim)
+        for index in range(natoms):
+            vec[3 * index : 3 * index + 3] = sqrt_m[index] * np.cross(
+                unit, pos[index]
+            )
+        raw.append(vec)
+    basis = []
+    for vec in raw:
+        work = np.asarray(vec, dtype=float).copy()
+        for kept in basis:
+            work = work - np.dot(work, kept) * kept
+        norm = float(np.linalg.norm(work))
+        if norm > tol:
+            basis.append(work / norm)
+    return basis
+
+
+def project_translation_rotation(hessian, atoms):
+    """Return a Cartesian Hessian with translation and rotation removed.
+
+    Projection is done in the mass-weighted Hessian. The result is
+    transformed back so ``VibrationsData`` can mass-weight it again.
+    """
+    array = np.asarray(hessian, dtype=float)
+    masses = np.asarray(atoms.get_masses(), dtype=float)
+    weights = np.repeat(masses**-0.5, 3)
+    weighted = array * weights[:, None] * weights[None, :]
+    projector = np.eye(weighted.shape[0])
+    for vec in _tr_basis(atoms):
+        projector = projector - np.outer(vec, vec)
+    projected = projector @ weighted @ projector
+    inverse = 1.0 / weights
+    cartesian = projected * inverse[:, None] * inverse[None, :]
+    return 0.5 * (cartesian + cartesian.T)
+
+
+def lowest_mode(atoms):
+    """Lowest mode after translation and rotation are projected out.
+
+    Returns ``(signed_cm, cartesian_mode, n_removed)``. ``n_removed``
+    is how many spurious imaginary modes (frequency < -1 cm⁻¹)
+    disappeared once translation and rotation were removed. The mode
+    is a unit Cartesian displacement.
+    """
+    hessian = cartesian_hessian(atoms)
+    raw_signed, _ = _diagonalize_hessian(atoms, hessian)
+    projected = project_translation_rotation(hessian, atoms)
+    signed, modes = _diagonalize_hessian(atoms, projected)
+    n_raw = int(np.sum(raw_signed < -IMAG_FLOOR_CM))
+    n_proj = int(np.sum(signed < -IMAG_FLOOR_CM))
+    n_removed = max(0, n_raw - n_proj)
     index = int(np.argmin(signed))
     mode = np.asarray(modes[index], dtype=float)
     norm = float(np.linalg.norm(mode))
     if norm > 0.0:
         mode = mode / norm
-    return signed, mode
+    return signed, mode, n_removed
 
 
 def _rank_of(pair, rows):
@@ -410,6 +488,11 @@ def _kabsch_rmsd(reference, mobile):
 
 
 def _run_sella(atoms, factory, fmax, steps):
+    """One Sella order-1 run. Returns ``(atoms, converged)``.
+
+    ``dyn.run`` is honored. A step-cap stop is not convergence.
+    Cartesian internals are tried only when the first run raises.
+    """
     try:
         from sella import Sella
     except ImportError as exc:
@@ -428,19 +511,14 @@ def _run_sella(atoms, factory, fmax, steps):
                 internal=internal,
                 logfile=None,
             )
-            dyn.run(fmax=fmax, steps=steps)
+            finished = dyn.run(fmax=fmax, steps=steps)
         except Exception as exc:  # noqa: BLE001 — try Cartesian next
             errors.append(f"internal={internal}: {type(exc).__name__}: {exc}")
             continue
         trial.constraints = []
         trial.calc = None
-        return trial
+        return trial, bool(finished)
     raise CalculatorError("Sella failed. " + " | ".join(errors))
-
-
-def _geometry_rmsd(left, right):
-    delta = np.asarray(left.positions) - np.asarray(right.positions)
-    return float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
 
 
 def write_gjf(path, atoms, charge, multiplicity, title):
@@ -477,10 +555,12 @@ def write_xyz(path, atoms, comment):
 
 
 def _profile_lines(frames):
-    lines = [f"{'frame':>5}  {'r/A':>8}  {'E/eV':>14}  {'rel/eV':>10}  ok"]
+    lines = [
+        f"{'frame':>5}  {'r/A':>8}  {'E/eV':>14}  {'rel/eV':>10}  relaxed"
+    ]
     origin = frames[0]["energy"]
     for frame in frames:
-        flag = "yes" if frame["converged"] else "no"
+        flag = "yes" if frame["converged"] else "no (step cap)"
         lines.append(
             f"{frame['index']:5d}  {frame['distance']:8.4f}  "
             f"{frame['energy']:14.6f}  "
@@ -490,9 +570,12 @@ def _profile_lines(frames):
 
 
 def _clear_guess_files(outdir):
+    """Remove a previous guess. Scan frames and the table stay."""
     for name in (
         "guess.xyz",
         "guess.gjf",
+        "guess_sella.xyz",
+        "guess_sella.gjf",
         "scan_max.xyz",
         "scan_max.gjf",
         "guess.sh",
@@ -500,6 +583,246 @@ def _clear_guess_files(outdir):
         path = os.path.join(outdir, name)
         if os.path.isfile(path):
             os.remove(path)
+
+
+def write_scan_xyz(path, frames):
+    """Every scan frame, including step-cap frames."""
+    lines = []
+    for frame in frames:
+        atoms = frame["atoms"]
+        state = "converged" if frame["converged"] else "step-cap"
+        lines.append(str(len(atoms)))
+        lines.append(
+            f"frame {frame['index']} r={frame['distance']:.4f} "
+            f"E={frame['energy']:.6f} {state}"
+        )
+        for symbol, xyz in zip(atoms.get_chemical_symbols(), atoms.positions):
+            lines.append(
+                f"{symbol:<2} {xyz[0]:14.8f} {xyz[1]:14.8f} {xyz[2]:14.8f}"
+            )
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def _reactant_key(atoms):
+    symbols = ",".join(atoms.get_chemical_symbols()).encode()
+    coords = np.round(np.asarray(atoms.positions, dtype=float), 8).tobytes()
+    return hashlib.sha256(symbols + b"\n" + coords).hexdigest()
+
+
+def _cache_path(outdir):
+    return os.path.join(outdir, "scan_cache.json")
+
+
+def _cache_matches(payload, bond, distances, fmax, steps, reactant):
+    if payload.get("bond") != [int(bond[0]), int(bond[1])]:
+        return False
+    cached = payload.get("distances") or []
+    if len(cached) != len(distances):
+        return False
+    if not np.allclose(cached, np.asarray(distances, dtype=float), atol=1e-8):
+        return False
+    if abs(float(payload.get("fmax", -1)) - float(fmax)) > 1e-12:
+        return False
+    if int(payload.get("relax_steps", -1)) != int(steps):
+        return False
+    return payload.get("reactant") == _reactant_key(reactant)
+
+
+def _frames_from_cache(payload):
+    from ase import Atoms
+
+    frames = []
+    for row in payload["frames"]:
+        frames.append(
+            {
+                "index": int(row["index"]),
+                "target": float(row["target"]),
+                "distance": float(row["distance"]),
+                "energy": float(row["energy"]),
+                "converged": bool(row["converged"]),
+                "atoms": Atoms(
+                    symbols=list(row["symbols"]),
+                    positions=np.asarray(row["positions"], dtype=float),
+                ),
+            }
+        )
+    return frames
+
+
+def _save_scan_cache(outdir, bond, distances, fmax, steps, reactant, frames):
+    payload = {
+        "bond": [int(bond[0]), int(bond[1])],
+        "distances": [float(value) for value in distances],
+        "fmax": float(fmax),
+        "relax_steps": int(steps),
+        "reactant": _reactant_key(reactant),
+        "frames": [
+            {
+                "index": int(frame["index"]),
+                "target": float(frame["target"]),
+                "distance": float(frame["distance"]),
+                "energy": float(frame["energy"]),
+                "converged": bool(frame["converged"]),
+                "symbols": list(frame["atoms"].get_chemical_symbols()),
+                "positions": np.asarray(
+                    frame["atoms"].positions, dtype=float
+                ).tolist(),
+            }
+            for frame in frames
+        ],
+    }
+    path = _cache_path(outdir)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+
+def _load_scan_cache(outdir, bond, distances, fmax, steps, reactant):
+    path = _cache_path(outdir)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not _cache_matches(payload, bond, distances, fmax, steps, reactant):
+        return None
+    return _frames_from_cache(payload)
+
+
+def _choose_maximum(frames):
+    """Maximum among converged frames.
+
+    Returns ``(chosen, low_confidence, edge)``. ``chosen`` is None when
+    every frame hit the step cap. ``edge`` is true when the frame used
+    for the decision is the first or last scan frame. ``low_confidence``
+    is true when that decision is not the highest frame in the profile,
+    or when the highest frame did not converge.
+    """
+    energies = [frame["energy"] for frame in frames]
+    global_index = int(np.argmax(energies))
+    global_max = frames[global_index]
+    converged = [frame for frame in frames if frame["converged"]]
+    if not converged:
+        edge = global_index in (0, len(frames) - 1)
+        return None, True, edge, global_max
+    conv_energy = [
+        frame["energy"] if frame["converged"] else -np.inf for frame in frames
+    ]
+    chosen_index = int(np.argmax(conv_energy))
+    chosen = frames[chosen_index]
+    edge = chosen_index in (0, len(frames) - 1)
+    low_confidence = (not global_max["converged"]) or (
+        chosen_index != global_index
+    )
+    return chosen, low_confidence, edge, global_max
+
+
+class _SecretFilter(logging.Filter):
+    """Drop HF_TOKEN from any log record before it is written."""
+
+    def filter(self, record):
+        token = os.environ.get("HF_TOKEN")
+        if not token:
+            return True
+        message = record.getMessage()
+        if token not in message and quote_token(token) not in message:
+            return True
+        record.msg = scrub_secret(message, token)
+        record.args = ()
+        return True
+
+
+def quote_token(token):
+    from urllib.parse import quote
+
+    return quote(token)
+
+
+def _route_guess_logs(outdir):
+    """Point root-logger stdout noise at ``guess.log`` for this call."""
+    root = logging.getLogger()
+    removed = []
+    for handler in list(root.handlers):
+        stream = getattr(handler, "stream", None)
+        is_file = isinstance(handler, logging.FileHandler)
+        if isinstance(handler, logging.StreamHandler) and not is_file:
+            if stream is sys.stdout:
+                root.removeHandler(handler)
+                removed.append(handler)
+    path = os.path.join(outdir, "guess.log")
+    handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+    handler.setFormatter(
+        logging.Formatter(
+            "{asctime} - {levelname:6s} - [{name}] {message}",
+            style="{",
+        )
+    )
+    handler.addFilter(_SecretFilter())
+    root.addHandler(handler)
+    return handler, removed
+
+
+def _restore_guess_logs(state):
+    handler, removed = state
+    root = logging.getLogger()
+    root.removeHandler(handler)
+    handler.close()
+    for item in removed:
+        root.addHandler(item)
+
+
+def _scrub_log_file(path):
+    token = os.environ.get("HF_TOKEN")
+    if not token or not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    cleaned = scrub_secret(text, token)
+    if cleaned != text:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(cleaned)
+
+
+def _write_text(path, text):
+    folder = os.path.dirname(os.path.abspath(path))
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def _maximum_line(frame):
+    return f"scan maximum: frame {frame['index']} at {frame['distance']:.4f} Å"
+
+
+def _append_mode(lines, atoms, factory, spec):
+    """Mode table for one converged frame. Returns the hit flag."""
+    mode_atoms = atoms.copy()
+    mode_atoms.calc = factory()
+    signed, mode, n_removed = lowest_mode(mode_atoms)
+    lowest = float(signed[int(np.argmin(signed))])
+    n_imag = int(np.sum(signed < -IMAG_FLOOR_CM))
+    lines.append(f"lowest frequency: {lowest:.2f} cm^-1")
+    lines.append(f"nimag (freq < -{IMAG_FLOOR_CM:.0f} cm^-1): {n_imag}")
+    lines.append(f"spurious imaginary modes removed: {n_removed}")
+    summary, info = mode_summary(
+        list(mode_atoms.get_chemical_symbols()),
+        np.asarray(mode_atoms.positions, dtype=float),
+        mode,
+        spec,
+    )
+    lines.extend(summary)
+    hit = bool(info["hit"] and lowest < -IMAG_FLOOR_CM)
+    lines.append(f"mode hit: {'yes' if hit else 'no'}")
+    return hit
+
+
+def _finish(outdir, lines, ok):
+    text = "\n".join(lines) + "\n"
+    _write_text(os.path.join(outdir, "stdout.txt"), text)
+    return text, ok
 
 
 def run_guess(
@@ -521,12 +844,68 @@ def run_guess(
     points=None,
     product_path=None,
 ):
-    """Scan, optionally refine, write guess files and a queue script.
+    """Scan, optionally report Sella, write the table.
 
-    Returns ``(text, ok)``. ``ok`` is false for ``FAIL (max at scan edge)``
-    and no guess files are left behind. Gaussian is not submitted.
+    Returns ``(text, ok)``. ``ok`` is false for ``FAIL (max at scan
+    edge)`` and when no converged frame can be a guess. Those runs
+    still write ``scan.xyz``, ``profile.txt``, and ``stdout.txt``.
+    ``guess.xyz`` is the converged scan maximum. ``--sella`` writes
+    ``guess_sella.xyz`` and does not replace it. Gaussian is not
+    submitted.
     """
     bond, start, target, count = _scan_setup(spec, points)
+    os.makedirs(outdir, exist_ok=True)
+    log_state = _route_guess_logs(outdir)
+    try:
+        text, ok = _run_guess_logged(
+            reactant_path,
+            spec,
+            factory,
+            bond=bond,
+            start=start,
+            target=target,
+            count=count,
+            charge=charge,
+            uhf=uhf,
+            multiplicity=multiplicity,
+            outdir=outdir,
+            calc_name=calc_name,
+            project=project,
+            label=label,
+            sella=sella,
+            sella_steps=sella_steps,
+            fmax=fmax,
+            relax_steps=relax_steps,
+            product_path=product_path,
+        )
+    finally:
+        _restore_guess_logs(log_state)
+        _scrub_log_file(os.path.join(outdir, "guess.log"))
+    return text, ok
+
+
+def _run_guess_logged(
+    reactant_path,
+    spec,
+    factory,
+    *,
+    bond,
+    start,
+    target,
+    count,
+    charge,
+    uhf,
+    multiplicity,
+    outdir,
+    calc_name,
+    project,
+    label,
+    sella,
+    sella_steps,
+    fmax,
+    relax_steps,
+    product_path,
+):
     reactant = load_structure(reactant_path)
     natoms = len(reactant)
     atom_i, atom_j = bond
@@ -558,44 +937,54 @@ def run_guess(
             if abs(measured - d_from) > 1e-4
             else ""
         ),
-        "Sella: on (order=1)" if sella else "Sella: off",
+        "Sella: on (order=1, report only)" if sella else "Sella: off",
         "energy profile (constrained primary bond, other atoms relaxed):",
     ]
-    frames = constrained_scan(
-        reactant, bond, distances, factory, fmax, relax_steps
+    cached = _load_scan_cache(
+        outdir, bond, distances, fmax, relax_steps, reactant
     )
-    lines.extend(_profile_lines(frames))
-    energies = [frame["energy"] for frame in frames]
-    imax = int(np.argmax(energies))
-    chosen = frames[imax]
-    lines.append(
-        f"scan maximum: frame {chosen['index']} at "
-        f"{chosen['distance']:.4f} Å"
-    )
-    os.makedirs(outdir, exist_ok=True)
-    if imax == 0 or imax == len(frames) - 1:
+    if cached is None:
+        frames = constrained_scan(
+            reactant, bond, distances, factory, fmax, relax_steps
+        )
+        _save_scan_cache(
+            outdir, bond, distances, fmax, relax_steps, reactant, frames
+        )
+    else:
+        frames = cached
+        lines.append("reused saved scan (not rerun)")
+    profile = _profile_lines(frames)
+    lines.extend(profile)
+    _write_text(os.path.join(outdir, "profile.txt"), "\n".join(profile) + "\n")
+    scan_path = os.path.abspath(os.path.join(outdir, "scan.xyz"))
+    write_scan_xyz(scan_path, frames)
+    lines.append(f"wrote {scan_path}")
+
+    chosen, low_confidence, edge, global_max = _choose_maximum(frames)
+    if chosen is None:
+        lines.append(_maximum_line(global_max))
+        lines.append(
+            "low confidence: the energy maximum frame did not converge"
+        )
+        if edge:
+            lines.append("FAIL (max at scan edge)")
+        else:
+            lines.append("no converged scan frame; no guess written")
+        _clear_guess_files(outdir)
+        return _finish(outdir, lines, False)
+
+    lines.append(_maximum_line(chosen))
+    if low_confidence:
+        lines.append(
+            "low confidence: the energy maximum frame did not converge "
+            f"(highest frame {global_max['index']})"
+        )
+    if edge:
         lines.append("FAIL (max at scan edge)")
         _clear_guess_files(outdir)
-        return "\n".join(lines) + "\n", False
+        return _finish(outdir, lines, False)
 
     guess_atoms = chosen["atoms"]
-    sella_note = None
-    if sella:
-        try:
-            guess_atoms = _run_sella(
-                chosen["atoms"], factory, fmax, sella_steps
-            )
-            lines.append(
-                "Sella refined the scan maximum "
-                f"(step cap {int(sella_steps)})."
-            )
-        except CalculatorError as exc:
-            sella_note = str(exc)
-            lines.append(f"Sella did not finish: {sella_note}")
-            lines.append("Guess stays the scan-maximum frame.")
-            guess_atoms = chosen["atoms"]
-
-    differs = _geometry_rmsd(guess_atoms, chosen["atoms"]) > 1e-3
     from chemsmart.cli.queue import _ts_cmd, _write
 
     project = project or spec.get("project") or "zn5"
@@ -605,66 +994,59 @@ def run_guess(
     guess_gjf = os.path.abspath(os.path.join(outdir, "guess.gjf"))
     write_xyz(guess_xyz, guess_atoms, title)
     write_gjf(guess_gjf, guess_atoms, charge, multiplicity, title)
+    for name in ("scan_max.xyz", "scan_max.gjf", "guess_sella.gjf"):
+        stale = os.path.join(outdir, name)
+        if os.path.isfile(stale):
+            os.remove(stale)
+    written = [guess_xyz, guess_gjf]
+    if sella:
+        sella_xyz = os.path.abspath(os.path.join(outdir, "guess_sella.xyz"))
+        try:
+            sella_atoms, converged = _run_sella(
+                chosen["atoms"], factory, fmax, sella_steps
+            )
+        except CalculatorError as exc:
+            lines.append(f"Sella did not finish: {exc}")
+            lines.append("guess.xyz stays the scan-maximum frame.")
+            if os.path.isfile(sella_xyz):
+                os.remove(sella_xyz)
+        else:
+            write_xyz(sella_xyz, sella_atoms, f"{title} sella report")
+            written.append(sella_xyz)
+            if converged:
+                lines.append(
+                    "Sella refined the scan maximum "
+                    f"(step cap {int(sella_steps)}). "
+                    "Report only; guess.xyz is the scan maximum."
+                )
+            else:
+                lines.append(
+                    "Sella did not finish "
+                    f"(step cap {int(sella_steps)}). "
+                    "guess.xyz stays the scan-maximum frame."
+                )
+    else:
+        stale = os.path.join(outdir, "guess_sella.xyz")
+        if os.path.isfile(stale):
+            os.remove(stale)
+
+    if chosen["converged"]:
+        _append_mode(lines, guess_atoms, factory, spec)
+    else:
+        lines.append("mode check skipped: frame did not converge")
+        lines.append("mode hit: no")
+    if product is not None:
+        lines.extend(_product_report(guess_atoms, product, spec, bond))
     commands = [
         _ts_cmd(project, guess_xyz, charge, multiplicity, f"{label}_guess")
     ]
-    written = [guess_xyz, guess_gjf]
-    if differs:
-        scan_xyz = os.path.abspath(os.path.join(outdir, "scan_max.xyz"))
-        scan_gjf = os.path.abspath(os.path.join(outdir, "scan_max.gjf"))
-        write_xyz(scan_xyz, chosen["atoms"], f"{title} scan maximum")
-        write_gjf(
-            scan_gjf,
-            chosen["atoms"],
-            charge,
-            multiplicity,
-            f"{title} scan maximum",
-        )
-        commands.append(
-            _ts_cmd(
-                project,
-                scan_xyz,
-                charge,
-                multiplicity,
-                f"{label}_scan_max",
-            )
-        )
-        written.extend([scan_xyz, scan_gjf])
-        lines.append(
-            "scan-max frame differs from the Sella guess; both written."
-        )
-    else:
-        for name in ("scan_max.xyz", "scan_max.gjf"):
-            stale = os.path.join(outdir, name)
-            if os.path.isfile(stale):
-                os.remove(stale)
-
     shell = os.path.abspath(os.path.join(outdir, "guess.sh"))
     _write(shell, commands)
     written.append(shell)
-
-    mode_atoms = guess_atoms.copy()
-    mode_atoms.calc = factory()
-    signed, mode = lowest_mode(mode_atoms)
-    lowest = float(signed[int(np.argmin(signed))])
-    n_imag = int(np.sum(signed < -IMAG_FLOOR_CM))
-    lines.append(f"lowest frequency: {lowest:.2f} cm^-1")
-    lines.append(f"nimag (freq < -{IMAG_FLOOR_CM:.0f} cm^-1): {n_imag}")
-    summary, info = mode_summary(
-        list(mode_atoms.get_chemical_symbols()),
-        np.asarray(mode_atoms.positions, dtype=float),
-        mode,
-        spec,
-    )
-    lines.extend(summary)
-    hit = bool(info["hit"] and lowest < -IMAG_FLOOR_CM)
-    lines.append(f"mode hit: {'yes' if hit else 'no'}")
-    if product is not None:
-        lines.extend(_product_report(guess_atoms, product, spec, bond))
     for path in written:
         lines.append(f"wrote {path}")
     lines.append("Wrote guess.sh (not submitted). Run it yourself.")
-    return "\n".join(lines) + "\n", True
+    return _finish(outdir, lines, True)
 
 
 def _product_report(guess, product, spec, driven):

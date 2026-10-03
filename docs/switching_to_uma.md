@@ -1,5 +1,9 @@
 # Switching to UMA
 
+`chemsmart guess` is experimental. It is not yet better than hand-built
+guesses (pass-2 xTB result: 1 of 3). The chemistry comparison is
+deferred until this calculator is available.
+
 `chemsmart guess --calc uma` is the calculator this command is built for.
 xTB (`--calc xtb`) is only there so the scan can be run before a Hugging
 Face token exists. It is not a claim about speed or about agreement
@@ -39,15 +43,16 @@ singlets), written to `atoms.info["spin"]`.
    `HF_TOKEN: set`.
 
 6. Run a guess from the reactant or precomplex and the case YAML.
-   `scan.to` is the product-side length of the primary bond. Chi sets
-   that number.
+   `scan.to` is the product-side length of the primary bond. Chi must
+   set that number. There is no default. Templates leave it `unset`.
 
    ```bash
    chemsmart guess -f reactant.xyz --spec case.yaml --calc uma
    ```
 
-   Add `--sella` only when you want a Sella order-1 refinement of the
-   scan-maximum frame. The default guess is the scan maximum itself.
+   Add `--sella` only when you want a report-only Sella order-1 run.
+   That writes `guess_sella.xyz` and does not replace `guess.xyz`.
+   The default guess is the converged scan maximum itself.
 
 If fairchem is missing, `HF_TOKEN` is unset, or Hugging Face rejects
 the gated repo, the command stops with an install or access message

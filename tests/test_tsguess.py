@@ -1,5 +1,8 @@
 """TS guess scan. Synthetic molecules only. No research geometries."""
 
+import importlib.util
+import os
+import subprocess
 import sys
 import types
 
@@ -16,11 +19,17 @@ from chemsmart.analysis.calculators import (
     uma_factory,
     xtb_factory,
 )
-from chemsmart.analysis.tscheck import EXPECTED_TS_ROUTE, canonicalize_route
+from chemsmart.analysis.tscheck import (
+    EXPECTED_TS_ROUTE,
+    canonicalize_route,
+    load_case_spec,
+)
 from chemsmart.analysis.tsguess import (
     GJF_TS_ROUTE,
     heavy_kabsch_rmsd,
+    lowest_mode,
     neb_fallback,
+    non_driven_pairs,
     run_guess,
 )
 from chemsmart.cli.main import entry_point
@@ -124,8 +133,6 @@ def _factory(monotone=False):
 
 
 def _case(path):
-    from chemsmart.analysis.tscheck import load_case_spec
-
     return load_case_spec(path)
 
 
@@ -186,10 +193,22 @@ class TestChargeAndOrdering:
             )
 
 
+class _TranslatingHessian(_ProfileCalc):
+    """Bond curvature plus a spurious imaginary translation."""
+
+    def get_hessian(self, atoms):
+        hessian = super().get_hessian(atoms)
+        trans = np.zeros(hessian.shape[0])
+        trans[0::3] = 1.0
+        trans /= np.linalg.norm(trans)
+        return hessian - 9.0 * np.outer(trans, trans)
+
+
 class TestScan:
-    def test_edge_maximum_writes_nothing(self, tmp_path):
+    def test_edge_maximum_still_writes_frames_and_table(self, tmp_path):
         reactant, _, _ = _reactant(tmp_path / "r.xyz")
         spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = tmp_path / "out"
         text, ok = run_guess(
             reactant,
             spec,
@@ -197,15 +216,25 @@ class TestScan:
             charge=0,
             uhf=0,
             multiplicity=1,
-            outdir=str(tmp_path / "out"),
+            outdir=str(out),
             calc_name="fake",
-            relax_steps=15,
-            fmax=0.2,
+            relax_steps=80,
+            fmax=0.05,
         )
         assert ok is False
         assert "FAIL (max at scan edge)" in text
-        assert not (tmp_path / "out" / "guess.xyz").exists()
-        assert not (tmp_path / "out" / "guess.sh").exists()
+        assert not (out / "guess.xyz").exists()
+        assert not (out / "guess.sh").exists()
+        assert (out / "scan.xyz").is_file()
+        assert (out / "profile.txt").is_file()
+        table = (out / "stdout.txt").read_text(encoding="utf-8")
+        assert table == text
+        assert "FAIL (max at scan edge)" in table
+        assert "frame" in (out / "profile.txt").read_text(encoding="utf-8")
+        from ase.io import read
+
+        frames = read(out / "scan.xyz", index=":")
+        assert len(frames) == 10
 
     def test_interior_maximum_writes_guess_and_queue(self, tmp_path):
         reactant, _, _ = _reactant(tmp_path / "r.xyz")
@@ -226,6 +255,9 @@ class TestScan:
         assert ok, text
         assert "Sella: off" in text
         assert "mode hit: yes" in text
+        assert "spurious imaginary modes removed:" in text
+        assert (out / "scan.xyz").is_file()
+        assert (out / "stdout.txt").is_file()
         assert "primary spec bond C1-N2 rank within 3.2" in text
         assert "Zmax" in text
         assert "information only" in text
@@ -258,12 +290,155 @@ class TestScan:
             relax_steps=40,
             fmax=0.1,
             sella=True,
-            sella_steps=3,
+            sella_steps=1,
         )
         assert ok, text
-        assert "Sella:" in text
+        assert "Sella did not finish" in text or "Sella refined" in text
         assert (out / "guess.xyz").is_file()
+        assert (out / "guess_sella.xyz").is_file()
         assert (out / "guess.sh").is_file()
+        assert "guess.xyz" in (out / "guess.sh").read_text(encoding="utf-8")
+        assert "guess_sella" not in (out / "guess.sh").read_text(
+            encoding="utf-8"
+        )
+
+    def test_sella_convergence_keeps_scan_maximum(self, tmp_path, monkeypatch):
+        from chemsmart.analysis import tsguess as tsguess_mod
+
+        calls = {"n": 0}
+        real_scan = tsguess_mod.constrained_scan
+
+        def _counted(*args, **kwargs):
+            calls["n"] += 1
+            return real_scan(*args, **kwargs)
+
+        monkeypatch.setattr(tsguess_mod, "constrained_scan", _counted)
+
+        class _Done:
+            def __init__(self, atoms, order=1, internal=True, logfile=None):
+                self.atoms = atoms
+                assert order == 1
+
+            def run(self, fmax, steps):
+                self.atoms.positions[0, 0] += 0.35
+                return True
+
+        fake = types.ModuleType("sella")
+        fake.Sella = _Done
+        monkeypatch.setitem(sys.modules, "sella", fake)
+
+        reactant, _, _ = _reactant(tmp_path / "r.xyz")
+        spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = tmp_path / "out"
+        kwargs = dict(
+            charge=0,
+            uhf=0,
+            multiplicity=1,
+            outdir=str(out),
+            calc_name="fake",
+            relax_steps=40,
+            fmax=0.1,
+        )
+        first, ok = run_guess(
+            reactant, spec, _factory(), sella=False, **kwargs
+        )
+        assert ok, first
+        assert calls["n"] == 1
+        guess_before = (out / "guess.xyz").read_text(encoding="utf-8")
+        second, ok = run_guess(
+            reactant, spec, _factory(), sella=True, sella_steps=5, **kwargs
+        )
+        assert ok, second
+        assert calls["n"] == 1
+        assert "reused saved scan" in second
+        assert "Sella refined" in second
+        assert "Sella did not finish" not in second
+        assert (out / "guess.xyz").read_text(encoding="utf-8") == guess_before
+        sella_text = (out / "guess_sella.xyz").read_text(encoding="utf-8")
+        assert sella_text != guess_before
+
+    def test_unconverged_sella_is_not_called_refined(
+        self, tmp_path, monkeypatch
+    ):
+        class _Stopped:
+            def __init__(self, atoms, order=1, internal=True, logfile=None):
+                self.atoms = atoms
+
+            def run(self, fmax, steps):
+                self.atoms.positions[1, 1] += 0.2
+                return False
+
+        fake = types.ModuleType("sella")
+        fake.Sella = _Stopped
+        monkeypatch.setitem(sys.modules, "sella", fake)
+        reactant, _, _ = _reactant(tmp_path / "r.xyz")
+        spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = tmp_path / "out"
+        text, ok = run_guess(
+            reactant,
+            spec,
+            _factory(),
+            charge=0,
+            uhf=0,
+            multiplicity=1,
+            outdir=str(out),
+            calc_name="fake",
+            relax_steps=40,
+            fmax=0.1,
+            sella=True,
+            sella_steps=2,
+        )
+        assert ok, text
+        assert "Sella did not finish" in text
+        assert "Sella refined" not in text
+        assert (out / "guess_sella.xyz").is_file()
+
+    def test_step_cap_maximum_is_low_confidence(self, tmp_path, monkeypatch):
+        from chemsmart.analysis import tsguess as tsguess_mod
+
+        real_relax = tsguess_mod._relax_fixed_bond
+
+        def _flag_long(atoms, bond, target, factory, fmax, steps):
+            clean, energy, converged = real_relax(
+                atoms, bond, target, factory, fmax, steps
+            )
+            if float(target) > 2.05:
+                return clean, energy + 50.0, False
+            return clean, energy, converged
+
+        monkeypatch.setattr(tsguess_mod, "_relax_fixed_bond", _flag_long)
+        reactant, _, _ = _reactant(tmp_path / "r.xyz")
+        spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = tmp_path / "out"
+        text, ok = run_guess(
+            reactant,
+            spec,
+            _factory(),
+            charge=0,
+            uhf=0,
+            multiplicity=1,
+            outdir=str(out),
+            calc_name="fake",
+            relax_steps=40,
+            fmax=0.1,
+        )
+        assert ok, text
+        assert "low confidence" in text
+        assert "step cap" in text
+        assert "FAIL (max at scan edge)" not in text
+        assert (out / "guess.xyz").is_file()
+        assert "mode hit:" in text
+
+    def test_translation_is_projected_out_of_the_mode(self):
+        atoms = Atoms(
+            symbols=["C", "N", "O"],
+            positions=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0], [1.5, 1.2, 0.1]],
+        )
+        atoms.calc = _TranslatingHessian()
+        _signed, mode, n_removed = lowest_mode(atoms)
+        assert n_removed >= 1
+        stretch = float(mode[1, 0] - mode[0, 0])
+        assert abs(stretch) > 0.2
 
     def test_neb_is_only_a_hook(self):
         with pytest.raises(NotImplementedError, match="not in this MVP"):
@@ -374,6 +549,7 @@ class TestCLI:
         def _refuse(*_args, **_kwargs):
             raise AssertionError("a job was submitted")
 
+        monkeypatch.setenv("HF_TOKEN", "hf_SUPER_SECRET_TOKEN")
         monkeypatch.setattr(
             "chemsmart.cli.guess.make_factory",
             lambda *args, **kwargs: _factory(monotone=True),
@@ -382,6 +558,7 @@ class TestCLI:
         monkeypatch.setattr("subprocess.Popen", _refuse)
         reactant, _, _ = _reactant(tmp_path / "r.xyz")
         spec = _spec(tmp_path / "case.yaml", target=1.2)
+        out = tmp_path / "out"
         result = CliRunner().invoke(
             entry_point,
             [
@@ -391,16 +568,25 @@ class TestCLI:
                 "--spec",
                 spec,
                 "-o",
-                str(tmp_path / "out"),
+                str(out),
                 "--relax-steps",
-                "15",
+                "80",
                 "--fmax",
-                "0.2",
+                "0.05",
             ],
         )
         assert result.exit_code == 1, result.output
         assert "FAIL (max at scan edge)" in result.output
-        assert not (tmp_path / "out" / "guess.xyz").exists()
+        assert "____ _   _ _____" not in result.output
+        assert not (out / "guess.xyz").exists()
+        assert (out / "scan.xyz").is_file()
+        assert (out / "stdout.txt").is_file()
+        assert "FAIL (max at scan edge)" in (out / "stdout.txt").read_text(
+            encoding="utf-8"
+        )
+        log = (out / "guess.log").read_text(encoding="utf-8")
+        assert "hf_SUPER_SECRET_TOKEN" not in log
+        assert "hf_SUPER_SECRET_TOKEN" not in result.output
         assert "hf_" not in result.output
 
 
@@ -471,6 +657,96 @@ def test_gfn2_scan_on_water(tmp_path):
     else:
         assert "FAIL (max at scan edge)" in text
         assert not (tmp_path / "out" / "guess.xyz").exists()
+        assert (tmp_path / "out" / "scan.xyz").is_file()
+        assert (tmp_path / "out" / "stdout.txt").is_file()
+
+
+def test_templates_leave_scan_to_for_chi():
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    expected = {
+        "case1.yaml": (19, 27),
+        "case1_ts2.yaml": (19, 1),
+        "case3.yaml": (5, 114),
+    }
+    for name, contact in expected.items():
+        path = os.path.join(
+            root, "chemsmart", "settings", "templates", "tscheck", name
+        )
+        spec = load_case_spec(path)
+        text = open(path, encoding="utf-8").read()
+        assert spec["scan"]["to"] is None
+        assert "Chi must set" in text
+        assert "to: unset" in text
+        assert "to: 1.5" not in text
+        assert "to: 2.4" not in text
+        pairs = {tuple(sorted(pair)) for pair in non_driven_pairs(spec)}
+        assert tuple(sorted(contact)) in pairs
+
+
+def test_unset_scan_to_is_rejected(tmp_path):
+    reactant, _, _ = _reactant(tmp_path / "r.xyz")
+    spec = _case(_spec(tmp_path / "case.yaml"))
+    raw = yaml.safe_load(open(tmp_path / "case.yaml", encoding="utf-8"))
+    raw["scan"]["to"] = "unset"
+    (tmp_path / "case.yaml").write_text(yaml.safe_dump(raw), encoding="utf-8")
+    spec = _case(str(tmp_path / "case.yaml"))
+    assert spec["scan"]["to"] is None
+    with pytest.raises(ValueError, match="Chi must set scan.to"):
+        run_guess(
+            reactant,
+            spec,
+            _factory(),
+            charge=0,
+            uhf=0,
+            multiplicity=1,
+            outdir=str(tmp_path / "out"),
+            calc_name="fake",
+        )
+
+
+def _load_scorer():
+    path = os.path.join(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+        "scripts",
+        "score_guess.py",
+    )
+    spec = importlib.util.spec_from_file_location("score_guess", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_scorer_reads_paths_from_the_environment(tmp_path):
+    source_path = os.path.join(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+        "scripts",
+        "score_guess.py",
+    )
+    source = open(source_path, encoding="utf-8").read()
+    assert "/workspace/tsauto" not in source
+    assert "TS_GUESS_OUT" in source
+    env = os.environ.copy()
+    env.pop("TS_GUESS_OUT", None)
+    result = subprocess.run(
+        [sys.executable, source_path],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "TS_GUESS_OUT" in result.stderr
+    assert "hf_" not in result.stderr
+    folder = tmp_path / "A_nosella"
+    folder.mkdir()
+    (folder / "stdout.txt").write_text(
+        "scan maximum: frame 12 at 2.2000 Å\nFAIL (max at scan edge)\n",
+        encoding="utf-8",
+    )
+    parsed = _load_scorer().parse_stdout(str(folder))
+    assert parsed["edge_fail"] is True
+    assert parsed["scan_max"] == "frame 12 at 2.2000 Å"
 
 
 def test_xtb_factory_passes_charge_and_multiplicity(monkeypatch):

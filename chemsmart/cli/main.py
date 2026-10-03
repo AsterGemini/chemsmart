@@ -28,7 +28,10 @@ def entry_point(ctx, verbose):
     """
     Main entry point for the chemsmart CLI.
     """
-    if verbose:
+    # ``guess`` keeps stdout to the result table. Calculator noise goes
+    # to guess.log inside run_guess, not to this banner.
+    quiet = ctx.invoked_subcommand == "guess"
+    if verbose and not quiet:
         debug = True
         stream = True
     else:
@@ -38,6 +41,8 @@ def entry_point(ctx, verbose):
     from chemsmart.utils.logger import create_logger
 
     logger = create_logger(debug=debug, stream=stream)
+    if quiet:
+        return
 
     # ASCII Arts for CHEMSMART
     logger.info("\n")

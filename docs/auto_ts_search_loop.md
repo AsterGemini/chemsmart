@@ -181,20 +181,25 @@ pairs listed under `bonds` or `contacts`) satisfy `|Δd| ≤ 0.15 Å`
 versus the DFT TS, and the guess's imaginary mode hits the primary
 bond (rank 1 within 3.2 Å). Primary-bond `|Δd|` and the heavy-atom
 Kabsch RMSD are printed as information. The baseline is Chi's
-hand-built guess, read from paths supplied to an external script, not
-the reactant. This gate is not a claim that the pipeline is faster.
+hand-built guess, read from paths supplied to `scripts/score_guess.py`
+(`TS_GUESS_OUT` and `TS_GUESS_<CASE>_{REACTANT,TS,BASELINE,SPEC}`;
+no path is hardcoded). This gate is not a claim that the pipeline is
+faster. Pass 2 on xTB scored 1 of 3 and the command is not yet better
+than hand-built guesses. The chemistry comparison is deferred to UMA.
+Pass 3 checks plumbing only.
 
 ### ACCEPTANCE
 
 1. `chemsmart guess -f reactant --spec case.yaml` runs a 1D
    constrained scan of the primary bond to YAML `scan.to`, 10–15
    points, everything else relaxed, and prints the energy profile.
-2. A maximum on the first or last frame prints
-   `FAIL (max at scan edge)` and writes no guess.
-3. Otherwise the scan-maximum frame is `guess.xyz` and `guess.gjf`,
-   with the tscheck mode table (primary rank, top pairs, Zmax as
-   information) and a `queue` shell file. `--sella` is off unless
-   asked. Gaussian is not submitted.
+2. A maximum on the first or last converged frame prints
+   `FAIL (max at scan edge)` and writes no `guess.xyz`. The run still
+   writes `scan.xyz` (every frame), `profile.txt`, and `stdout.txt`.
+3. Otherwise the converged scan-maximum frame is `guess.xyz` and
+   `guess.gjf`, with the tscheck mode table (primary rank, top pairs,
+   Zmax as information) and a `queue` shell file. `--sella` is off
+   unless asked. Gaussian is not submitted.
 4. `--calc uma` is `FAIRChemCalculator`, task `omol`, charge and spin
    (multiplicity) from the YAML. `HF_TOKEN` comes from the environment
    and is never printed. `--check-access` does not evaluate an energy.
@@ -246,6 +251,27 @@ the calculator Hessian the mode test asked for.
 The scan, the edge check, the mode table, and writing xyz, gjf, and
 the queue file. Still manual: `scan.to` and the bond list, judging
 the mode, every submit, and the final OK.
+
+## Guess generation (critic pass 3)
+
+`chemsmart guess` is experimental. The pass-2 xTB plumbing gate was
+1 of 3: only one case produced a guess, and the other two stopped on
+`FAIL (max at scan edge)`. That is not yet better than hand-built
+guesses. The chemistry gate waits for UMA. This pass is plumbing.
+
+- `scripts/score_guess.py` reads every path from `TS_GUESS_*` env vars.
+- `--sella` stays opt-in and report-only. A converged Sella run writes
+  `guess_sella.xyz` and does not replace `guess.xyz` or rerun the scan.
+- The mode Hessian projects out translation and rotation, runs only on
+  a converged frame, and reports how many spurious imaginary modes
+  were removed.
+- A frame that hits the relaxation step cap is flagged and left out of
+  the maximum. If the highest frame did not converge, the table says
+  `low confidence`.
+- A failed run still writes `scan.xyz`, `profile.txt`, and `stdout.txt`.
+  Calculator noise goes to `guess.log`. Stdout is the table.
+- Templates set `scan.to: unset`. Chi must set it. There is no default
+  and no second driven coordinate. Zn contacts are scoring-only.
 
 ### Related methods (not used)
 

@@ -68,7 +68,10 @@ from chemsmart.analysis.tsguess import run_guess
     "--sella",
     is_flag=True,
     default=False,
-    help="Refine the scan-maximum frame with Sella (order=1). Off by default.",
+    help=(
+        "Report-only Sella order=1 run. Writes guess_sella.xyz and "
+        "does not replace guess.xyz. Off by default."
+    ),
 )
 @click.option(
     "--sella-steps",
@@ -161,16 +164,23 @@ def guess(
 ):
     """Drive the primary spec bond and write a TS guess.
 
-    Reads the reactant with -f and the case YAML scan block. The scan
-    is 1D: the primary bond is constrained, everything else is relaxed,
-    10–15 points out to scan.to. If the energy maximum is the first or
-    last frame, prints ``FAIL (max at scan edge)`` and writes nothing.
+    Experimental: not yet better than hand-built guesses (pass-2 xTB
+    result). Reads the reactant with -f and the case YAML scan block.
+    The scan is 1D: the primary bond is constrained, everything else is
+    relaxed, 10–15 points out to scan.to. Chi sets scan.to; there is
+    no default. The maximum is taken only from converged frames. If
+    that frame is the first or last point, prints ``FAIL (max at scan
+    edge)``. A failed run still writes scan.xyz, the profile, and the
+    result table, and does not write guess.xyz.
 
-    The default guess is that maximum frame. Its Hessian mode is scored
-    with the same projection as ``chemsmart check`` (primary rank within
-    3.2 Å, top pairs, Zmax as information). ``--sella`` refines it.
-    Also writes a shell file of ``chemsmart queue`` TS lines. Does not
-    submit.
+    The default guess is that converged maximum frame. Its Hessian mode
+    is scored only when the frame converged, after translation and
+    rotation are projected out, with the same pair projection as
+    ``chemsmart check`` (primary rank within 3.2 Å, top pairs, Zmax as
+    information). ``--sella`` is report-only: it writes guess_sella.xyz
+    and does not replace guess.xyz or rerun the scan. Also writes a
+    shell file of ``chemsmart queue`` TS lines. Does not submit.
+    Stdout is the table; calculator noise goes to guess.log.
 
     ``--calc uma`` reads HF_TOKEN from the environment and does not
     print it. ``--check-access`` stops after the access check.
