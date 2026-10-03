@@ -1,0 +1,21 @@
+Synthetic IRC fixture. Invented text only. Not a research calculation.
+# MN15 def2svp irc(calcfc,recalc=6,forward,maxpoints=512,maxcycle=128)
+---------------------------------------------------------------------
+Charge =  0 Multiplicity = 1
+NAtoms=    3
+Symbolic Z-matrix:
+Charge =  0 Multiplicity = 1
+O     0.000000   0.000000   0.000000
+H     0.900000   0.000000   0.000000
+H     0.000000   0.900000   0.000000
+
+Point Number:   1          Path Number:   1
+Point Number:   2          Path Number:   1
+Point Number:   3          Path Number:   1
+Point Number:   4          Path Number:   1
+Point Number:   5          Path Number:   1
+Point Number:   6          Path Number:   1
+PES minimum detected on this side of the pathway.
+Reaction path calculation complete.
+Total number of points:                    6
+Normal termination of Gaussian 16 at test.

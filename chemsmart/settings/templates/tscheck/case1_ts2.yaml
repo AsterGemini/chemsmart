@@ -1,0 +1,14 @@
+# Case 1 TS2 (O1–C8). Same molecule numbering as case1.yaml / TS1b.
+# PLACEHOLDER: Chi sets these endpoint thresholds.
+# While endpoints is unset, check prints "endpoint criteria unset".
+name: case1_ts2
+project: zn5
+charge: 0
+multiplicity: 1
+primary_bond: [1, 8]  # O1–C8
+bonds:
+  - [1, 8]
+  - [21, 1]
+  - [8, 29]
+  - [21, 2]
+endpoints: unset

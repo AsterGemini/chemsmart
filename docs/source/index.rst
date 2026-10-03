@@ -56,6 +56,12 @@ computational chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Automated TS Search
+
+   auto-ts-search
+
+.. toctree::
+   :maxdepth: 2
    :caption: ORCA Jobs
 
    orca-cli-options

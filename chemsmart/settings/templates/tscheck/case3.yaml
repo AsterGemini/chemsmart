@@ -1,0 +1,25 @@
+# Case 3 TS2 (ester; C113–O114 breaking).
+# Atom numbers match ts-scout Case 3 TS2 / k0_small_ester …_ts.log.
+# Endpoint criteria from pass-2 spec: INT2 C113–O114 < 1.5 Å,
+# product > 2.3 Å.
+name: case3_ts2
+project: zn5
+charge: 0
+multiplicity: 1
+primary_bond: [113, 114]  # C113–O114
+bonds:
+  - [113, 114]  # C113–O114
+  - [113, 115]  # C113–O115 carbonyl
+  - [20, 113]   # N20–C113
+  - [5, 114]    # Zn5–O114
+endpoints:
+  INT2:
+    bonds:
+      - atoms: [113, 114]
+        op: "<"
+        value: 1.5
+  product:
+    bonds:
+      - atoms: [113, 114]
+        op: ">"
+        value: 2.3
