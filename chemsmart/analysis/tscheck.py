@@ -160,7 +160,41 @@ def load_case_spec(path):
         "endpoints": endpoints,
         "endpoints_set": endpoints_set,
         "project": data.get("project", "zn5"),
+        "scan": _parse_scan(data.get("scan"), primary),
+        "contacts": [
+            parse_atom_pair(item) for item in (data.get("contacts") or [])
+        ],
+        "uhf": data.get("uhf"),
         "raw": data,
+    }
+
+
+def _parse_scan(raw, primary):
+    """Optional 1D scan block. ``guess`` validates it; ``check`` does not."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("scan must be a mapping (bond, from, to, points)")
+    bond = raw.get("bond")
+    if bond is None:
+        bond = primary
+    else:
+        bond = parse_atom_pair(bond)
+    target = raw.get("to")
+    points = raw.get("points", 12)
+    if target is None or (
+        isinstance(target, str)
+        and target.strip().lower() in UNSET_ENDPOINT | {""}
+    ):
+        # Placeholder. ``guess`` refuses to scan until Chi sets a number.
+        parsed_to = None
+    else:
+        parsed_to = float(target)
+    return {
+        "bond": bond,
+        "from": raw.get("from", "auto"),
+        "to": parsed_to,
+        "points": int(points),
     }
 
 

@@ -123,7 +123,51 @@ Examples:
 -  Final OK on a verified TS
 -  Cluster ``zn5.yaml`` (stale copy in ts-scout is a note for Chi, not edited)
 
-UMA/MLIP, early-kill, and custom Gaussian templates are out of scope. UMA is deferred until an HF token exists and a
-3-TS mode-agreement test passes.
+Early-kill and custom Gaussian templates stay out of scope. ``check`` and ``queue`` still do not call a calculator.
+``chemsmart guess`` is experimental and is not yet better than hand-built guesses. UMA is the intended calculator; xTB is plumbing.
+Switching steps: ``docs/switching_to_uma.md``.
+
+*****
+guess
+*****
+
+``chemsmart guess`` is experimental. On the pass-2 xTB plumbing gate it is not yet better than hand-built guesses
+(1 of 3 cases produced a guess; the other two were ``FAIL (max at scan edge)``). The chemistry comparison is
+deferred to UMA. Pass 3 checks the plumbing.
+
+.. code:: bash
+
+   chemsmart guess --calc uma --check-access
+   chemsmart guess -f reactant.xyz --spec case1.yaml --calc xtb
+   chemsmart guess -f reactant.xyz --spec case1.yaml --calc uma --sella
+
+``-f`` is the reactant or precomplex (xyz, gjf/com, or the last geometry of a Gaussian log). The product is optional
+and is only reported against; the same atom ordering is required, and atoms are not remapped. Chi must set
+``scan.to``, the product-side length of the primary bond. There is no default and no second driven coordinate.
+Templates use ``to: unset`` until that number is filled in. Zn contacts listed under ``contacts`` are scoring-only.
+``scan.from: auto`` uses the distance in ``-f``. The scan is 1D: 10–15 points, that bond constrained, everything else
+relaxed. The energy profile is printed. A frame that hits the relaxation step cap is flagged and is not eligible
+for the maximum. If the highest frame did not converge, the table says ``low confidence``.
+
+If the maximum among converged frames is the first or last of those converged frames, the command prints ``FAIL (max at scan edge)``
+and does not write ``guess.xyz``. It still writes ``scan.xyz`` (every frame), ``profile.txt``, and ``stdout.txt``.
+Otherwise it writes ``guess.xyz`` and ``guess.gjf`` for that converged frame, a mode table (primary-bond rank
+within 3.2 Å, top pairs, Zmax as information), and ``guess.sh`` of ``chemsmart queue`` TS lines. The mode Hessian
+projects out translation and rotation and runs only on a converged frame. It reports how many spurious imaginary
+modes were removed. ``--sella`` is opt-in and report-only: it writes ``guess_sella.xyz`` and does not replace
+``guess.xyz``, even when Sella converges, and it does not rerun the scan. Nothing is submitted. Stdout is the
+table. Calculator noise goes to ``guess.log``.
+
+The external scorer is ``scripts/score_guess.py``. Every path comes from ``TS_GUESS_OUT`` and
+``TS_GUESS_<CASE>_{REACTANT,TS,BASELINE,SPEC}``.
+
+``--calc uma`` uses ``FAIRChemCalculator`` with task ``omol``, charge from the YAML, and spin equal to the
+multiplicity. ``HF_TOKEN`` is read from the environment and is not printed. ``--calc xtb`` is GFN2-xTB (tblite, or
+xtb-python) with charge and uhf from the YAML or the CLI. Both stacks are the optional extra
+``pip install 'chemsmart[mlip]'``, not core dependencies.
+
+Climbing-image NEB is not built. ``neb_fallback`` is the hook for it. autodE, pysisyphus, and React-OT are cited in
+``docs/auto_ts_search_loop.md`` and are not vendored. Choosing ``scan.to``, judging the mode, every submit, and the
+final OK stay manual.
 
 Loop.md notes: ``docs/auto_ts_search_loop.md``.
