@@ -13,6 +13,7 @@ from chemsmart.utils.cli import MyGroup
 
 from .check import check
 from .config import config
+from .guess import guess
 from .queue import queue
 from .run import run
 from .sub import sub
@@ -73,6 +74,7 @@ entry_point.add_command(config)
 entry_point.add_command(update)
 entry_point.add_command(check)
 entry_point.add_command(queue)
+entry_point.add_command(guess)
 
 
 def main():  # pragma: no cover

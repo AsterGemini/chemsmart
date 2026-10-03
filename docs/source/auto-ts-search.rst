@@ -123,7 +123,38 @@ Examples:
 -  Final OK on a verified TS
 -  Cluster ``zn5.yaml`` (stale copy in ts-scout is a note for Chi, not edited)
 
-UMA/MLIP, early-kill, and custom Gaussian templates are out of scope. UMA is deferred until an HF token exists and a
-3-TS mode-agreement test passes.
+Early-kill and custom Gaussian templates stay out of scope. ``check`` and ``queue`` still do not call a calculator.
+``chemsmart guess`` is the later step that proposes a structure. UMA is the intended calculator; xTB is plumbing.
+Switching steps: ``docs/switching_to_uma.md``.
+
+*****
+guess
+*****
+
+.. code:: bash
+
+   chemsmart guess --calc uma --check-access
+   chemsmart guess -f reactant.xyz --spec case1.yaml --calc xtb
+   chemsmart guess -f reactant.xyz --spec case1.yaml --calc uma --sella
+
+``-f`` is the reactant or precomplex (xyz, gjf/com, or the last geometry of a Gaussian log). The product is optional
+and is only reported against; the same atom ordering is required, and atoms are not remapped. The case YAML needs
+``scan.to``, the product-side length of the primary bond (forming example ~1.5 Å, breaking example ~2.4 Å).
+``scan.from: auto`` uses the distance in ``-f``. The scan is 1D: 10–15 points, that bond constrained, everything else
+relaxed. The energy profile is printed.
+
+If the maximum is the first or last frame, the command prints ``FAIL (max at scan edge)`` and writes no guess.
+Otherwise it writes ``guess.xyz`` and ``guess.gjf`` for that frame, a mode table (primary-bond rank within 3.2 Å, top
+pairs, Zmax as information), and ``guess.sh`` of ``chemsmart queue`` TS lines. ``--sella`` refines the frame
+(Sella, order 1, step cap) and also writes the scan-max frame when the geometries differ. Nothing is submitted.
+
+``--calc uma`` uses ``FAIRChemCalculator`` with task ``omol``, charge from the YAML, and spin equal to the
+multiplicity. ``HF_TOKEN`` is read from the environment and is not printed. ``--calc xtb`` is GFN2-xTB (tblite, or
+xtb-python) with charge and uhf from the YAML or the CLI. Both stacks are the optional extra
+``pip install 'chemsmart[mlip]'``, not core dependencies.
+
+Climbing-image NEB is not built. ``neb_fallback`` is the hook for it. autodE, pysisyphus, and React-OT are cited in
+``docs/auto_ts_search_loop.md`` and are not vendored. Choosing ``scan.to``, judging the mode, every submit, and the
+final OK stay manual.
 
 Loop.md notes: ``docs/auto_ts_search_loop.md``.

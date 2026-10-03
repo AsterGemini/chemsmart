@@ -17,3 +17,10 @@ bonds:
   - [21, 1]    # Zn21–O1
   - [1, 8]     # O1–C8
 endpoints: unset
+# `chemsmart guess` drives this primary bond. Chi sets `to`.
+# Forming example from the guess spec (~1.5 Å), not a fitted distance.
+scan:
+  bond: [8, 29]
+  from: auto
+  to: 1.5
+  points: 12

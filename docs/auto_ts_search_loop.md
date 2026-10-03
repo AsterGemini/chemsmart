@@ -161,5 +161,102 @@ None on intended behavior. Implementation notes:
 ## Related work (from pass 1–2; not wrapped)
 
 chemsmart already covers ts, irc, qrc, opt. autodE, pysisyphus, and Sella
-are reuse candidates for a later MLIP stage only after HF access and a 3-TS
-mode-agreement test. They are not used in this MVP.
+were reuse candidates for a later guess stage. That stage is the guess
+section below. The packages are still not vendored.
+
+## Guess generation (critic pass 1)
+
+### PROBLEM
+
+`check` and `queue` only look at a finished Gaussian TS. The missing
+step is a structure to submit. The calculator that step is built for
+is UMA (`facebook/UMA`, task `omol`). Hugging Face access is still
+rejected, so the same command has to run today on GFN2-xTB.
+
+### METRIC
+
+Plumbing gate for xTB only, not a speedup. On at least 2 of 3 cases,
+the non-driven distances (secondary spec bonds, plus Zn–O and Zn–N
+pairs listed under `bonds` or `contacts`) satisfy `|Δd| ≤ 0.15 Å`
+versus the DFT TS, and the guess's imaginary mode hits the primary
+bond (rank 1 within 3.2 Å). Primary-bond `|Δd|` and the heavy-atom
+Kabsch RMSD are printed as information. The baseline is Chi's
+hand-built guess, read from paths supplied to an external script, not
+the reactant. This gate is not a claim that the pipeline is faster.
+
+### ACCEPTANCE
+
+1. `chemsmart guess -f reactant --spec case.yaml` runs a 1D
+   constrained scan of the primary bond to YAML `scan.to`, 10–15
+   points, everything else relaxed, and prints the energy profile.
+2. A maximum on the first or last frame prints
+   `FAIL (max at scan edge)` and writes no guess.
+3. Otherwise the scan-maximum frame is `guess.xyz` and `guess.gjf`,
+   with the tscheck mode table (primary rank, top pairs, Zmax as
+   information) and a `queue` shell file. `--sella` is off unless
+   asked. Gaussian is not submitted.
+4. `--calc uma` is `FAIRChemCalculator`, task `omol`, charge and spin
+   (multiplicity) from the YAML. `HF_TOKEN` comes from the environment
+   and is never printed. `--check-access` does not evaluate an energy.
+   `--calc xtb` is GFN2 via tblite or xtb-python, charge and uhf from
+   the YAML or the CLI. Both live in `chemsmart[mlip]`.
+5. The product is optional and is not a scan input. NEB is a hook
+   (`neb_fallback`), not an implementation. Tests use synthetic
+   molecules. Private geometries are not committed.
+
+### QUESTION
+
+- Two endpoints and a CI-NEB: the real case (Case 4) has no product.
+  Product-required input is an assumption. Dropped.
+- Ranking guesses by barrier: the scan already defines one frame, the
+  energy maximum. A second ranking is not a separate decision. Dropped.
+- Sella on every guess: extra Hessian iterations before the scan is
+  known to be interior. Off unless `--sella`.
+- Driving every spec bond: one coordinate matches the case YAML Chi
+  already writes. The scan is the primary bond only.
+- Atom remapping: same ordering is required. Fail, do not remap.
+- Putting fairchem, Sella, and tblite in core dependencies: they are
+  not needed for `check` or `queue`. Optional extra.
+
+### DELETE
+
+- Climbing-image NEB (hook left, code not built). Confirmed by the
+  acceptance list: a 1D scan still proposes a guess.
+- Product as a required input. Reporting against `--product` remains.
+- Barrier ranking of several candidates.
+- Sella as a default.
+- Vendoring autodE, pysisyphus, or React-OT.
+- Early-kill and custom route templates, unchanged from pass 2.
+
+### SIMPLIFY
+
+One command, one bond, one profile. Mode projection calls tscheck
+(`rank_pairs`, `zmax_row`, the same table). The shell file calls the
+existing queue writer. Structures go through `Molecule.from_filepath`.
+
+### ACCELERATE
+
+`--check-access` answers "can UMA run?" before a scan. The default
+path does not call Sella. An analytical Hessian is used when the
+calculator exposes `get_hessian`; otherwise a finite difference is
+the calculator Hessian the mode test asked for.
+
+### AUTOMATE
+
+The scan, the edge check, the mode table, and writing xyz, gjf, and
+the queue file. Still manual: `scan.to` and the bond list, judging
+the mode, every submit, and the final OK.
+
+### Related methods (not used)
+
+- autodE (Duarte group) builds reaction profiles with constrained
+  scans and NEB: <https://github.com/duartegroup/autodE>
+- pysisyphus (Steinmetzer, Grimme, and co-workers) optimizes reaction
+  paths, including scans and NEB: <https://github.com/eljost/pysisyphus>
+- React-OT generates a TS from a reactant and a product by optimal
+  transport (Duan, Liu, Du, et al., Nat. Mach. Intell. 7, 615–626,
+  2025, <https://doi.org/10.1038/s42256-025-01010-0>). This command
+  has no product, so that model is not applicable here.
+- Sella is the optional saddle optimizer (Hermes, Sargsyan, Najm,
+  Zádor, J. Chem. Theory Comput. 2019, 15, 6536). ASE's
+  climbing-image NEB is the unused fallback hook.

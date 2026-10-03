@@ -23,3 +23,10 @@ endpoints:
       - atoms: [113, 114]
         op: ">"
         value: 2.3
+# `chemsmart guess` drives this primary bond. Chi sets `to`.
+# Breaking example from the guess spec (~2.4 Å), not a fitted distance.
+scan:
+  bond: [113, 114]
+  from: auto
+  to: 2.4
+  points: 12

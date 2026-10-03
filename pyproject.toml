@@ -73,6 +73,13 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
+# UMA, Sella, and the xTB ASE calculators. Not imported by core
+# commands. Install with: pip install 'chemsmart[mlip]'
+mlip = [
+    "fairchem-core>=2.2",
+    "sella>=2.3",
+    "tblite>=0.3",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"
