@@ -149,7 +149,7 @@ Templates use ``to: unset`` until that number is filled in. Zn contacts listed u
 relaxed. The energy profile is printed. A frame that hits the relaxation step cap is flagged and is not eligible
 for the maximum. If the highest frame did not converge, the table says ``low confidence``.
 
-If the maximum among converged frames is the first or last frame, the command prints ``FAIL (max at scan edge)``
+If the maximum among converged frames is the first or last of those converged frames, the command prints ``FAIL (max at scan edge)``
 and does not write ``guess.xyz``. It still writes ``scan.xyz`` (every frame), ``profile.txt``, and ``stdout.txt``.
 Otherwise it writes ``guess.xyz`` and ``guess.gjf`` for that converged frame, a mode table (primary-bond rank
 within 3.2 Å, top pairs, Zmax as information), and ``guess.sh`` of ``chemsmart queue`` TS lines. The mode Hessian

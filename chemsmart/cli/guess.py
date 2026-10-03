@@ -228,6 +228,7 @@ def guess(
             multiplicity=mult_v,
             outdir=outdir,
             calc_name=kind,
+            model=model,
             project=project,
             label=label,
             sella=sella,

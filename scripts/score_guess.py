@@ -75,11 +75,51 @@ def geom_metrics(atoms, ts, spec):
     }
 
 
+def baseline_code_version():
+    """Stamp for the baseline Hessian cache.
+
+    Changes when the projected-mode code changes, so a cache written
+    before that projection is not reused.
+    """
+    import hashlib
+    import inspect
+
+    from chemsmart.analysis import tsguess
+
+    parts = [
+        inspect.getsource(tsguess.project_translation_rotation),
+        inspect.getsource(tsguess._tr_basis),
+        inspect.getsource(tsguess.lowest_mode),
+    ]
+    return hashlib.sha256("".join(parts).encode()).hexdigest()[:16]
+
+
+def load_cached_baseline_mode(path):
+    """Return a baseline-mode record only when its version stamp matches."""
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        cached = json.load(handle)
+    if cached.get("version") != baseline_code_version():
+        return None
+    return cached
+
+
+def variant_guess_path(directory, variant):
+    """Geometry the scorer reads for one run.
+
+    ``nosella`` is the scan maximum (``guess.xyz``). ``sella`` is the
+    report-only file (``guess_sella.xyz``), which is not a copy of it.
+    """
+    name = "guess_sella.xyz" if variant == "sella" else "guess.xyz"
+    return os.path.join(directory, name)
+
+
 def baseline_mode(case, out):
     path = os.path.join(out, f"{case}_baseline_mode.json")
-    if os.path.isfile(path):
-        with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+    cached = load_cached_baseline_mode(path)
+    if cached is not None:
+        return cached
     spec = load_case_spec(env(case, "SPEC"))
     charge, uhf, _mult = resolve_charge_uhf(spec)
     atoms = load_structure(env(case, "BASELINE"))
@@ -109,6 +149,7 @@ def baseline_mode(case, out):
         ),
         "lines": lines,
         "hessian_s": time.time() - started,
+        "version": baseline_code_version(),
     }
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=1)
@@ -181,7 +222,7 @@ def main():
         for variant in ("nosella", "sella"):
             directory = os.path.join(out, f"{case}_{variant}")
             info = parse_stdout(directory)
-            guess_xyz = os.path.join(directory, "guess.xyz")
+            guess_xyz = variant_guess_path(directory, variant)
             if os.path.isfile(guess_xyz):
                 guess = load_structure(guess_xyz)
                 assert_same_ordering(ts, guess, "TS", "guess")

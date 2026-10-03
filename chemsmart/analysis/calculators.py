@@ -131,8 +131,9 @@ def check_uma_access(model=DEFAULT_UMA_MODEL):
     token = _require_token()
     _silence_hub_logs()
     try:
-        from huggingface_hub import hf_hub_url
-        from huggingface_hub.utils import get_hf_file_metadata
+        # hub 2.x exports this from the top-level package. It is not
+        # in huggingface_hub.utils, so that import falsely looks missing.
+        from huggingface_hub import get_hf_file_metadata, hf_hub_url
     except ImportError as exc:
         raise CalculatorError(
             "huggingface_hub is not installed. It is pulled in by "

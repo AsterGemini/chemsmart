@@ -617,7 +617,22 @@ def _cache_path(outdir):
     return os.path.join(outdir, "scan_cache.json")
 
 
-def _cache_matches(payload, bond, distances, fmax, steps, reactant):
+def _cache_identity(
+    calc_name, model, charge, uhf, multiplicity, target, count
+):
+    """Fields that must match before a saved scan can be reused."""
+    return {
+        "calc": str(calc_name),
+        "model": "" if model is None else str(model),
+        "charge": int(charge),
+        "uhf": int(uhf),
+        "multiplicity": int(multiplicity),
+        "scan_to": round(float(target), 8),
+        "points": int(count),
+    }
+
+
+def _cache_matches(payload, bond, distances, fmax, steps, reactant, identity):
     if payload.get("bond") != [int(bond[0]), int(bond[1])]:
         return False
     cached = payload.get("distances") or []
@@ -629,6 +644,17 @@ def _cache_matches(payload, bond, distances, fmax, steps, reactant):
         return False
     if int(payload.get("relax_steps", -1)) != int(steps):
         return False
+    for key, value in identity.items():
+        cached_value = payload.get(key, None)
+        if key == "scan_to":
+            try:
+                same = abs(float(cached_value) - float(value)) <= 1e-8
+            except (TypeError, ValueError):
+                same = False
+            if not same:
+                return False
+        elif cached_value != value:
+            return False
     return payload.get("reactant") == _reactant_key(reactant)
 
 
@@ -653,13 +679,16 @@ def _frames_from_cache(payload):
     return frames
 
 
-def _save_scan_cache(outdir, bond, distances, fmax, steps, reactant, frames):
+def _save_scan_cache(
+    outdir, bond, distances, fmax, steps, reactant, frames, identity
+):
     payload = {
         "bond": [int(bond[0]), int(bond[1])],
         "distances": [float(value) for value in distances],
         "fmax": float(fmax),
         "relax_steps": int(steps),
         "reactant": _reactant_key(reactant),
+        **identity,
         "frames": [
             {
                 "index": int(frame["index"]),
@@ -680,13 +709,15 @@ def _save_scan_cache(outdir, bond, distances, fmax, steps, reactant, frames):
         json.dump(payload, handle)
 
 
-def _load_scan_cache(outdir, bond, distances, fmax, steps, reactant):
+def _load_scan_cache(outdir, bond, distances, fmax, steps, reactant, identity):
     path = _cache_path(outdir)
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
-    if not _cache_matches(payload, bond, distances, fmax, steps, reactant):
+    if not _cache_matches(
+        payload, bond, distances, fmax, steps, reactant, identity
+    ):
         return None
     return _frames_from_cache(payload)
 
@@ -694,17 +725,21 @@ def _load_scan_cache(outdir, bond, distances, fmax, steps, reactant):
 def _choose_maximum(frames):
     """Maximum among converged frames.
 
-    Returns ``(chosen, low_confidence, edge)``. ``chosen`` is None when
-    every frame hit the step cap. ``edge`` is true when the frame used
-    for the decision is the first or last scan frame. ``low_confidence``
-    is true when that decision is not the highest frame in the profile,
-    or when the highest frame did not converge.
+    Returns ``(chosen, low_confidence, edge, global_max)``. ``chosen``
+    is None when every frame hit the step cap. ``edge`` is true when
+    that chosen frame is the first or last converged frame (a
+    step-capped endpoint does not hide a monotonic profile). When
+    nothing converged, ``edge`` follows the global maximum instead.
+    ``low_confidence`` is true when the highest frame did not converge
+    or is not the chosen frame.
     """
     energies = [frame["energy"] for frame in frames]
     global_index = int(np.argmax(energies))
     global_max = frames[global_index]
-    converged = [frame for frame in frames if frame["converged"]]
-    if not converged:
+    converged_index = [
+        index for index, frame in enumerate(frames) if frame["converged"]
+    ]
+    if not converged_index:
         edge = global_index in (0, len(frames) - 1)
         return None, True, edge, global_max
     conv_energy = [
@@ -712,7 +747,7 @@ def _choose_maximum(frames):
     ]
     chosen_index = int(np.argmax(conv_energy))
     chosen = frames[chosen_index]
-    edge = chosen_index in (0, len(frames) - 1)
+    edge = chosen_index in (converged_index[0], converged_index[-1])
     low_confidence = (not global_max["converged"]) or (
         chosen_index != global_index
     )
@@ -843,6 +878,7 @@ def run_guess(
     relax_steps=80,
     points=None,
     product_path=None,
+    model=None,
 ):
     """Scan, optionally report Sella, write the table.
 
@@ -877,6 +913,7 @@ def run_guess(
             fmax=fmax,
             relax_steps=relax_steps,
             product_path=product_path,
+            model=model,
         )
     finally:
         _restore_guess_logs(log_state)
@@ -905,6 +942,7 @@ def _run_guess_logged(
     fmax,
     relax_steps,
     product_path,
+    model,
 ):
     reactant = load_structure(reactant_path)
     natoms = len(reactant)
@@ -940,15 +978,25 @@ def _run_guess_logged(
         "Sella: on (order=1, report only)" if sella else "Sella: off",
         "energy profile (constrained primary bond, other atoms relaxed):",
     ]
+    identity = _cache_identity(
+        calc_name, model, charge, uhf, multiplicity, target, count
+    )
     cached = _load_scan_cache(
-        outdir, bond, distances, fmax, relax_steps, reactant
+        outdir, bond, distances, fmax, relax_steps, reactant, identity
     )
     if cached is None:
         frames = constrained_scan(
             reactant, bond, distances, factory, fmax, relax_steps
         )
         _save_scan_cache(
-            outdir, bond, distances, fmax, relax_steps, reactant, frames
+            outdir,
+            bond,
+            distances,
+            fmax,
+            relax_steps,
+            reactant,
+            frames,
+            identity,
         )
     else:
         frames = cached

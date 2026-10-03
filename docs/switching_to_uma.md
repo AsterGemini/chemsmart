@@ -1,8 +1,9 @@
 # Switching to UMA
 
 `chemsmart guess` is experimental. It is not yet better than hand-built
-guesses (pass-2 xTB result: 1 of 3). The chemistry comparison is
-deferred until this calculator is available.
+guesses. On the xTB benchmark, the hand-built guesses beat xTB on all
+3 cases. The chemistry comparison is deferred until this calculator
+is available.
 
 `chemsmart guess --calc uma` is the calculator this command is built for.
 xTB (`--calc xtb`) is only there so the scan can be run before a Hugging

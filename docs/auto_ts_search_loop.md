@@ -256,8 +256,9 @@ the mode, every submit, and the final OK.
 
 `chemsmart guess` is experimental. The pass-2 xTB plumbing gate was
 1 of 3: only one case produced a guess, and the other two stopped on
-`FAIL (max at scan edge)`. That is not yet better than hand-built
-guesses. The chemistry gate waits for UMA. This pass is plumbing.
+`FAIL (max at scan edge)`. On the xTB benchmark, the hand-built
+guesses beat xTB on all 3 cases. The chemistry gate waits for UMA.
+This pass is plumbing.
 
 - `scripts/score_guess.py` reads every path from `TS_GUESS_*` env vars.
 - `--sella` stays opt-in and report-only. A converged Sella run writes

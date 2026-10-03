@@ -1,6 +1,7 @@
 """TS guess scan. Synthetic molecules only. No research geometries."""
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -429,6 +430,102 @@ class TestScan:
         assert (out / "guess.xyz").is_file()
         assert "mode hit:" in text
 
+    def test_step_capped_last_frame_is_still_an_edge(
+        self, tmp_path, monkeypatch
+    ):
+        """Energies 0,1,2,3 with only the last frame step-capped."""
+        from chemsmart.analysis import tsguess as tsguess_mod
+
+        def _four(_atoms, _bond, _distances, _factory, _fmax, _steps):
+            frames = []
+            for index, energy in enumerate((0.0, 1.0, 2.0, 3.0)):
+                frames.append(
+                    {
+                        "index": index + 1,
+                        "target": 2.0 - 0.2 * index,
+                        "distance": 2.0 - 0.2 * index,
+                        "energy": energy,
+                        "converged": index < 3,
+                        "atoms": _atoms.copy(),
+                    }
+                )
+            return frames
+
+        monkeypatch.setattr(tsguess_mod, "constrained_scan", _four)
+        reactant, _, _ = _reactant(tmp_path / "r.xyz")
+        spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = tmp_path / "out"
+        text, ok = run_guess(
+            reactant,
+            spec,
+            _factory(),
+            charge=0,
+            uhf=0,
+            multiplicity=1,
+            outdir=str(out),
+            calc_name="fake",
+            relax_steps=5,
+            fmax=0.2,
+        )
+        assert ok is False
+        assert "FAIL (max at scan edge)" in text
+        assert not (out / "guess.xyz").exists()
+        assert (out / "scan.xyz").is_file()
+
+    def test_scan_cache_rejects_a_different_charge_or_calc(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.analysis import tsguess as tsguess_mod
+
+        calls = {"n": 0}
+
+        def _rising(atoms, _bond, distances, _factory, _fmax, _steps):
+            calls["n"] += 1
+            frames = []
+            for index, distance in enumerate(distances):
+                frames.append(
+                    {
+                        "index": index + 1,
+                        "target": float(distance),
+                        "distance": float(distance),
+                        "energy": float(index),
+                        "converged": True,
+                        "atoms": atoms.copy(),
+                    }
+                )
+            return frames
+
+        monkeypatch.setattr(tsguess_mod, "constrained_scan", _rising)
+        reactant, _, _ = _reactant(tmp_path / "r.xyz")
+        spec = _case(_spec(tmp_path / "case.yaml", target=1.2))
+        out = str(tmp_path / "out")
+        common = dict(
+            uhf=0,
+            multiplicity=1,
+            outdir=out,
+            relax_steps=5,
+            fmax=0.2,
+        )
+        run_guess(
+            reactant, spec, _factory(), charge=0, calc_name="fake", **common
+        )
+        assert calls["n"] == 1
+        text = run_guess(
+            reactant, spec, _factory(), charge=2, calc_name="fake", **common
+        )[0]
+        assert calls["n"] == 2
+        assert "reused saved scan" not in text
+        text = run_guess(
+            reactant, spec, _factory(), charge=2, calc_name="xtb", **common
+        )[0]
+        assert calls["n"] == 3
+        assert "reused saved scan" not in text
+        text = run_guess(
+            reactant, spec, _factory(), charge=2, calc_name="xtb", **common
+        )[0]
+        assert calls["n"] == 3
+        assert "reused saved scan" in text
+
     def test_translation_is_projected_out_of_the_mode(self):
         atoms = Atoms(
             symbols=["C", "N", "O"],
@@ -500,6 +597,31 @@ class TestCLI:
         message = str(caught.value)
         assert token not in message
         assert "facebook/UMA" in message
+
+    def test_check_access_uses_hub_toplevel_metadata(self, monkeypatch):
+        """hub 2.x exports get_hf_file_metadata from huggingface_hub."""
+        token = "hf_SUPER_SECRET_TOKEN"
+        monkeypatch.setenv("HF_TOKEN", token)
+        _install_fake_fairchem(monkeypatch)
+        hub = types.ModuleType("huggingface_hub")
+        utils = types.ModuleType("huggingface_hub.utils")
+
+        def hf_hub_url(repo_id, filename):
+            return f"https://example.invalid/{repo_id}/{filename}"
+
+        def get_hf_file_metadata(url, token=None):
+            return types.SimpleNamespace(size=1)
+
+        hub.hf_hub_url = hf_hub_url
+        hub.get_hf_file_metadata = get_hf_file_metadata
+        monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+        monkeypatch.setitem(sys.modules, "huggingface_hub.utils", utils)
+        lines = check_uma_access()
+        text = "\n".join(lines)
+        assert "UMA access ok" in text
+        assert "huggingface_hub is not installed" not in text
+        assert token not in text
+        assert not hasattr(utils, "get_hf_file_metadata")
 
     def test_check_access_ok_does_not_print_token(self, monkeypatch):
         token = "hf_SUPER_SECRET_TOKEN"
@@ -620,6 +742,7 @@ def _install_fake_hub(monkeypatch, fail):
         return types.SimpleNamespace(size=1)
 
     hub.hf_hub_url = hf_hub_url
+    hub.get_hf_file_metadata = get_hf_file_metadata
     utils.get_hf_file_metadata = get_hf_file_metadata
     monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
     monkeypatch.setitem(sys.modules, "huggingface_hub.utils", utils)
@@ -747,6 +870,52 @@ def test_scorer_reads_paths_from_the_environment(tmp_path):
     parsed = _load_scorer().parse_stdout(str(folder))
     assert parsed["edge_fail"] is True
     assert parsed["scan_max"] == "frame 12 at 2.2000 Å"
+
+
+def test_sella_row_scores_guess_sella_and_stale_mode_cache_is_dropped(
+    tmp_path,
+):
+    module = _load_scorer()
+    folder = tmp_path / "A_sella"
+    folder.mkdir()
+    _write_xyz(
+        folder / "guess.xyz",
+        ["C", "N", "O"],
+        [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 1.3, 0.0]],
+    )
+    _write_xyz(
+        folder / "guess_sella.xyz",
+        ["C", "N", "O"],
+        [[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [1.2, 1.3, 0.0]],
+    )
+    sella_path = module.variant_guess_path(str(folder), "sella")
+    plain_path = module.variant_guess_path(str(folder), "nosella")
+    assert sella_path.endswith("guess_sella.xyz")
+    assert plain_path.endswith("guess.xyz")
+    from chemsmart.analysis.tsguess import bond_distance, load_structure
+
+    assert bond_distance(load_structure(sella_path), (1, 2)) == pytest.approx(
+        1.2
+    )
+    assert bond_distance(load_structure(plain_path), (1, 2)) == pytest.approx(
+        2.0
+    )
+    stale = tmp_path / "A_baseline_mode.json"
+    stale.write_text(json.dumps({"nimag": 99, "hit": False}), encoding="utf-8")
+    assert module.load_cached_baseline_mode(str(stale)) is None
+    stale.write_text(
+        json.dumps(
+            {
+                "nimag": 1,
+                "hit": True,
+                "version": module.baseline_code_version(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = module.load_cached_baseline_mode(str(stale))
+    assert loaded["nimag"] == 1
+    assert loaded["version"] == module.baseline_code_version()
 
 
 def test_xtb_factory_passes_charge_and_multiplicity(monkeypatch):
