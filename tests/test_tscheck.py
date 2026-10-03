@@ -233,6 +233,19 @@ def small_imag_log(tmp_path):
 
 
 @pytest.fixture()
+def large_extra_imag_log(tmp_path):
+    return write_log(
+        tmp_path / "large_extra.log",
+        route="# opt=(ts,calcfc,noeigentest,maxstep=5) freq MN15 def2svp",
+        symbols=SYMBOLS,
+        numbers=NUMBERS,
+        positions=POS,
+        freqs=[-175.16, -40.0, 30.0],
+        modes=[MODE_TS, np.zeros((4, 3))],
+    )
+
+
+@pytest.fixture()
 def opt_log(tmp_path):
     return write_log(
         tmp_path / "opt.log",
@@ -376,17 +389,27 @@ class TestCheckTS:
         assert report.verdict == "CANDIDATE: judge mode"
         assert report.force_used is True
 
-    def test_small_imag_is_counted_and_printed(
-        self, small_imag_log, case_yaml
-    ):
+    def test_small_extra_imag_is_candidate(self, small_imag_log, case_yaml):
         spec = load_case_spec(case_yaml)
         report = check_ts_log(small_imag_log, spec)
+        text = report.text()
+        assert report.nimag == 2
+        assert report.verdict == "CANDIDATE: judge mode"
+        assert "small imag (<15): judge" in text
+        assert "-8.2000" in text
+        assert "REJECT" not in text
+
+    def test_large_extra_imag_is_hard_reject(
+        self, large_extra_imag_log, case_yaml
+    ):
+        spec = load_case_spec(case_yaml)
+        report = check_ts_log(large_extra_imag_log, spec, force=True)
+        text = report.text()
         assert report.nimag == 2
         assert report.verdict == "REJECT"
-        assert (
-            "small imag present (<15 cm⁻¹); counted in nimag" in report.text()
-        )
-        assert "-8.2000" in report.text()
+        assert report.force_used is False
+        assert "hard reject" in text
+        assert "small imag (<15): judge" not in text
 
     def test_nimag_zero_hard_reject(self, opt_log, case_yaml):
         spec = load_case_spec(case_yaml)

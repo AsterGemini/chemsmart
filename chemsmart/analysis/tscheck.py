@@ -412,7 +412,6 @@ def check_ts_log(
     nimag, imag = count_imaginary(freqs)
     imag_freq = imag[0] if imag else None
     freq, mode = first_imaginary_mode(freqs, modes)
-    small = small_imaginary(imag)
 
     report = CheckReport(
         kind=kind,
@@ -428,10 +427,6 @@ def check_ts_log(
     lines.append(f"nimag: {nimag}")
     if imag_freq is not None:
         lines.append(f"imaginary frequency: {imag_freq:.4f} cm^-1")
-    if small:
-        lines.append("small imag present (<15 cm⁻¹); counted in nimag")
-        for freq_small in small:
-            lines.append(f"  {freq_small:.4f} cm^-1")
     lines.append(f"charge/mult: {charge} {multiplicity}")
 
     route_info = check_route(kind, route)
@@ -467,12 +462,27 @@ def check_ts_log(
     if kind == "opt":
         return _fill_opt(report, spec, symbols, positions, nimag)
 
-    if nimag != 1:
+    extras = imag[1:]
+    large_extras = [freq for freq in extras if abs(freq) >= SMALL_IMAG_CM]
+    if nimag == 0 or large_extras:
         report.verdict = "REJECT"
-        report.reasons.append(f"nimag≠1 is a hard reject (found {nimag})")
+        if nimag == 0:
+            reason = "nimag=0 is a hard reject"
+        else:
+            reason = (
+                "nimag≥2 with an extra mode |freq|≥15 cm^-1 "
+                f"is a hard reject (found {nimag})"
+            )
+        report.reasons.append(reason)
         lines.append(f"verdict: {report.verdict}")
-        lines.append(report.reasons[-1])
+        lines.append(reason)
         return report
+
+    small_modes = small_imaginary(imag)
+    if extras and small_modes:
+        lines.append("small imag (<15): judge")
+        for freq_small in small_modes:
+            lines.append(f"  {freq_small:.4f} cm^-1")
 
     if mode is None:
         report.verdict = "REJECT"
@@ -533,7 +543,8 @@ def check_ts_log(
             lines.append(f"verdict: {report.verdict}")
             return report
         # No meaningful rank to print. Record the override and finish
-        # as a candidate. nimag≠1 is the only non-overridable reject.
+        # as a candidate. nimag=0 and a large extra imaginary mode are
+        # the non-overridable rejects.
         report.force_used = True
         report.reasons.append(msg + " [--force override]")
         lines.append(msg + " [--force override]")

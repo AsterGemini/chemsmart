@@ -21,7 +21,8 @@ from chemsmart.analysis.tscheck import check_ts_log, load_case_spec
     default=False,
     help=(
         "Override a displaced-bond or zero-projection reject "
-        "to CANDIDATE. Does not override nimag≠1."
+        "to CANDIDATE. Does not override nimag=0 or an extra "
+        "imaginary mode at or above 15 cm^-1."
     ),
 )
 @click.option(
@@ -49,13 +50,14 @@ def check(log, spec, force, kind, project, ts_file):
     Prints nimag, imaginary frequency, charge/mult, the top-8 pair
     projections, spec-bond ranks, and Zmax (information only).
 
-    Hard TS reject that --force does not override: nimag≠1. Rejects
+    Hard TS rejects that --force does not override: nimag=0, and
+    nimag≥2 when an extra imaginary mode has |freq|≥15 cm^-1. Extra
+    modes that are all under 15 cm^-1 print 'small imag (<15): judge',
+    list each small mode, and stay 'CANDIDATE: judge mode'. Rejects
     that --force overrides: primary spec bond not #1 within 3.2 Å, and
     spec bonds with ~0 projection ('spec bonds not displaced in mode',
-    no rank). A small extra imaginary mode still counts in nimag and
-    prints 'small imag present (<15 cm⁻¹); counted in nimag'.
-    Endpoint nimag≠0 is 'ENDPOINT NOT MIN'. Failed endpoint bonds are
-    'connectivity mismatch: judge'. Unset YAML criteria print
+    no rank). Endpoint nimag≠0 is 'ENDPOINT NOT MIN'. Failed endpoint
+    bonds are 'connectivity mismatch: judge'. Unset YAML criteria print
     'endpoint criteria unset'. Does not submit jobs.
 
     Examples:

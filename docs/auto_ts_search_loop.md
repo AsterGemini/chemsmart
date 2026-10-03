@@ -40,13 +40,13 @@ Count Chi's manual actions per verified TS.
 1. `check` prints nimag, imag freq, charge/mult, top-8 pair projections with
    distances, spec-bond ranks, Zmax (info only). The table header notes
    `projections from 2-decimal displacements`.
-2. The only hard TS rejects are nimag≠1 (every negative frequency counts;
-   `--force` does not override) and primary spec bond not #1 within 3.2 Å
-   (`--force` overrides; rank printed on that path). If every spec-bond
-   projection is about 0, the reject is `spec bonds not displaced in mode`
-   and does not quote a rank. `--force` overrides that reject too and
-   records the override. A negative with |freq| < 15 cm⁻¹ prints
-   `small imag present (<15 cm⁻¹); counted in nimag` and is still counted.
+2. Hard TS rejects that `--force` does not override: nimag=0, and nimag≥2
+   when an extra imaginary mode has |freq| ≥ 15 cm⁻¹. Extra modes that are
+   all under 15 cm⁻¹ print `small imag (<15): judge`, list each small mode,
+   and stay `CANDIDATE: judge mode`. Primary spec bond not #1 within 3.2 Å
+   is a reject `--force` overrides; rank printed on that path. If every
+   spec-bond projection is about 0, the reject is `spec bonds not displaced
+   in mode` and does not quote a rank. `--force` overrides that reject too.
 3. Route and 0/1 charge/mult checked against the three expected MN15/def2svp
    routes. Neg1-style routes are flagged. Flags do not turn a CANDIDATE
    into REJECT.
@@ -85,8 +85,8 @@ wrap-vs-rebuild of autodE/pysisyphus/Sella/UMA.
 | Automated | Why it survived |
 | --- | --- |
 | Parse nimag / imag / charge/mult / top-8 / spec ranks / Zmax | Mechanical; Zmax is printed only |
-| Hard reject nimag≠1 (every negative counted) | Robust on the benchmark set |
-| Print `small imag present (<15 cm⁻¹); counted in nimag` | Not dropped silently; nimag≥2 from a tiny mode stays REJECT |
+| Hard reject nimag=0, or nimag≥2 with an extra mode \|freq\| ≥ 15 cm⁻¹ | `--force` does not override |
+| `small imag (<15): judge` when every extra mode is under 15 cm⁻¹ | Not a hard reject; verdict stays CANDIDATE |
 | Reject primary bond not #1 within 3.2 Å (`--force` override) | Rank printed on this path only |
 | Reject `spec bonds not displaced in mode` when every spec projection is ~0 (`--force` override) | No meaningful rank; override does not quote one |
 | Route and 0/1 charge/mult flag | Catches Neg1's old route without auto-rejecting |
